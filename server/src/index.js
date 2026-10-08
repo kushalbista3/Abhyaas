@@ -1,10 +1,13 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { openDb } from './db.js';
+import { createSmsEngine } from './engine.js';
 import { lanAddresses, startupBanner } from './lan.js';
+import { createLlm } from './llm/client.js';
 
 const db = openDb(config.dbPath);
-const app = createApp(db);
+const llm = createLlm();
+const app = createApp(db, createSmsEngine(db, { llm }));
 
 // 0.0.0.0 so the SMS gateway phone on the same LAN can reach this laptop.
 // Express 5 passes a listen failure (e.g. port taken) to this callback instead
@@ -22,4 +25,9 @@ const server = app.listen(config.port, '0.0.0.0', (err) => {
   const { port } = server.address();
   console.log(`Abhyaas server on http://0.0.0.0:${port}`);
   for (const line of startupBanner(port, lanAddresses())) console.log(line);
+  // Load the model now, not on the first student SMS. Not awaited: the SMS
+  // loop works without it (canned replies).
+  llm.prewarm().then(({ ok, ms }) =>
+    console.log(ok ? `Gemma (${llm.model}) ready in ${ms}ms` : `Gemma (${llm.model}) not reachable; SMS uses canned replies`),
+  );
 });

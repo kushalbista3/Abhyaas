@@ -1,7 +1,12 @@
 // The student SMS loop: one incoming SMS in, one reply out.
 // Grading is plain code (CLAUDE.md rule 2); every reply goes through
 // smsSafe() and the outbox (rule 3); errors fall back to a canned reply (rule 4).
+// The local model (llm) only maps free-text replies to a letter and answers
+// maths concept questions. Its calls run between DB transactions, since a
+// better-sqlite3 transaction can't await.
 import { SMS_LIMIT, firstFitting, fitsOneSms, gsmLength, smsSafe } from './gsm7.js';
+import { askModel, computeReply, isComputeRequest, isScienceQuestion, topicOf } from './llm/ask.js';
+import { localLetter, modelLetter } from './llm/parse-reply.js';
 import {
   DAILY_QUIZ_CAP,
   firstTries,
@@ -33,7 +38,9 @@ export const REPLIES = {
   cap: `You have done ${DAILY_QUIZ_CAP} questions today. Great work! Come back tomorrow.`,
   hint: 'Not quite. Check each step of your working and try again. Reply A/B/C/D',
   askUsage: 'Send ASK and your question, e.g. ASK what is a prime factor?',
-  askSaved: 'Thanks! Your question is saved. Your teacher will reply soon.',
+  askTeacher: 'Your question was sent to your teacher.',
+  askScience: 'Your question was sent to your teacher. Try QUIZ SCI meanwhile.',
+  whichOption: (id) => `Reply A/B/C/D to answer Q${id}.`,
   unknownSubject: 'Unknown subject. Send SUBJECT MATH or SUBJECT SCI.',
   unknown: 'Sorry, I did not understand. Send HELP for commands.',
 };
@@ -46,7 +53,9 @@ const welcomeMessage = (name) =>
 // Letters, spaces and . ' - only; "  sita   gurung " -> "sita gurung".
 const cleanName = (raw) => raw.replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30).trim();
 
-export function createSmsEngine(db, { now = () => new Date() } = {}) {
+// llm: createLlm() from ./llm/client.js, or null (tests, no model): every
+// model step then takes its canned fallback.
+export function createSmsEngine(db, { now = () => new Date(), llm = null } = {}) {
   const q = {
     studentByPhone: db.prepare('SELECT * FROM students WHERE phone = ?'),
     studentById: db.prepare('SELECT * FROM students WHERE id = ?'),
@@ -66,7 +75,9 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
       VALUES (?, ?, ?, ?, ?, ?)`),
     explanation: db.prepare(`SELECT text FROM explanations
       WHERE question_id = ? AND option = ? AND status = 'approved' ORDER BY id DESC LIMIT 1`),
-    insertDoubt: db.prepare('INSERT INTO doubts (student_id, subject, text, created_at) VALUES (?, ?, ?, ?)'),
+    insertDoubt: db.prepare('INSERT INTO doubts (student_id, subject, text, status, reply, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    lastMathTopic: db.prepare(`SELECT q.topic FROM sessions s JOIN questions q ON q.id = s.current_question_id
+      WHERE s.student_id = ? AND q.subject = 'MATH' ORDER BY s.id DESC LIMIT 1`),
     logMessage: db.prepare('INSERT INTO messages (student_id, phone, direction, body, created_at) VALUES (?, ?, ?, ?, ?)'),
     queue: db.prepare('INSERT INTO outbox (phone, body, status, created_at, sent_at) VALUES (?, ?, ?, ?, ?)'),
   };
@@ -191,11 +202,40 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     return weak ? firstFitting(`${core} Practise ${weak}.`, core) : core;
   }
 
+  // Every ASK is saved as a doubt for the teacher. Science never reaches the
+  // model (rule 8), nor do maths sums; a maths concept question returns a
+  // model step that finish() runs.
   function ask(student, text, t) {
     if (!text) return REPLIES.askUsage;
-    // Placeholder until the local model answers doubts: log it for the teacher.
-    q.insertDoubt.run(student.id, student.current_subject, text, sqlTime(t));
-    return REPLIES.askSaved;
+    if (student.current_subject === 'SCI' || isScienceQuestion(text)) {
+      q.insertDoubt.run(student.id, 'SCI', text, 'open', null, sqlTime(t));
+      return REPLIES.askScience;
+    }
+    if (isComputeRequest(text)) {
+      q.insertDoubt.run(student.id, 'MATH', text, 'open', null, sqlTime(t));
+      return computeReply(topicOf(text) ?? q.lastMathTopic.get(student.id)?.topic);
+    }
+    return { ask: { studentId: student.id, text } };
+  }
+
+  // The model half of a reply, outside any transaction, then back in one.
+  async function finish(step, t) {
+    if (step.ask) {
+      const { studentId, text } = step.ask;
+      const reply = await askModel(llm, text);
+      // Answered doubts keep the model's reply so the teacher can see it.
+      q.insertDoubt.run(studentId, 'MATH', text, reply ? 'answered' : 'open', reply, sqlTime(t));
+      return reply ?? REPLIES.askTeacher;
+    }
+    const { studentId, sessionId, question, text } = step.parse;
+    const letter = await modelLetter(llm, question, text);
+    return db.transaction(() => {
+      // Another SMS (e.g. QUIZ) may have changed the question meanwhile.
+      const pending = q.pending.get(studentId);
+      if (!pending) return REPLIES.noPending;
+      if (pending.id !== sessionId || !letter) return REPLIES.whichOption(pending.question_id);
+      return answer(q.studentById.get(studentId), letter, t);
+    })();
   }
 
   function route(phone, body, t) {
@@ -230,10 +270,13 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     // A bare subject word ("SCI", "ganit") is SUBJECT <word>.
     if (SUBJECT_ALIASES[command] && !arg) return subjectCommand(student, command);
 
+    // Free text with a question waiting: "b ho", "mero answer c", "2034", else the model.
     const pending = q.pending.get(student.id);
-    return pending
-      ? `Sorry, I did not understand. Reply A, B, C or D to answer Q${pending.question_id}, or send HELP.`
-      : REPLIES.unknown;
+    if (!pending) return REPLIES.unknown;
+    const question = q.question.get(pending.question_id);
+    const meant = localLetter(body, question);
+    if (meant) return answer(student, meant, t);
+    return { parse: { studentId: student.id, sessionId: pending.id, question, text: body.trim() } };
   }
 
   // Logs to messages and outbox. status 'sent' when the reply goes back in
@@ -263,7 +306,9 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     }
     let reply;
     try {
-      reply = db.transaction(() => route(phone, body, t))();
+      // A string, or a model step to finish outside the transaction.
+      const result = db.transaction(() => route(phone, body, t))();
+      reply = typeof result === 'string' ? result : await finish(result, t);
     } catch (err) {
       report(phone, err);
       reply = REPLIES.error;

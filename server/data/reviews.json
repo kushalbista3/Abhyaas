@@ -1,0 +1,27 @@
+{
+  "seed:PHY-1": {
+    "status": "approved"
+  },
+  "seed:PHY-2": {
+    "status": "approved"
+  },
+  "seed:CHEM-1": {
+    "status": "approved"
+  },
+  "seed:CHEM-2": {
+    "status": "approved"
+  },
+  "seed:BIO-1": {
+    "status": "approved"
+  },
+  "seed:BIO-2": {
+    "solution": "Pulmonary veins bring oxygen-rich blood from the lungs to the left atrium. They are the only veins in adults that carry oxygen-rich blood.",
+    "status": "approved"
+  },
+  "seed:EARTH-1": {
+    "status": "approved"
+  },
+  "seed:EARTH-2": {
+    "status": "approved"
+  }
+}

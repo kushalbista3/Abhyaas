@@ -25,18 +25,20 @@ SEE (Nepal Grade 10) maths and science MCQ practice over SMS for students on key
 |---|---|
 | `npm run dev` | server (`node --watch`) + client (`vite --host`) via concurrently |
 | `npm test` | server tests (`node:test`, files in `server/test/`) |
-| `npm run seed` | validate and insert the seed questions and demo students (idempotent) |
-| `npm run demo:reset` | delete the local DB and reseed |
-| `npm run questions:review` | `list [--all]`, `approve <ids>`, `edit <id> [field=value ...]` (no fields opens `$EDITOR`) |
+| `npm run seed` | validate and insert the seed questions and demo students, then apply the committed snapshots (idempotent) |
+| `npm run demo:reset` | delete the local DB and reseed (teacher approvals come back from the snapshots) |
+| `npm run questions:review` | `list [--all]`, `approve <ids>`, `edit <id> [field=value ...]` (no fields opens `$EDITOR`); writes `reviews.json` |
+| `npm run explain:generate` | local Gemma drafts explanations for wrong options of approved questions (`--redo` replaces drafts) |
+| `npm run explain:review` | `list`, `approve <ids>`, `reject <ids>`, `edit <id or 11B> "<text>"`; writes `explanations.json` |
 
 ## Layout
 
 ```
-server/src/config.js             loads .env; DB_PATH, PORT, OLLAMA_MODEL, GEMINI_MODEL
+server/src/config.js             loads .env; DB_PATH, PORT, OLLAMA_HOST, OLLAMA_MODEL, GEMINI_MODEL, SNAPSHOT_DIR
 server/src/db.js                 openDb() + full schema (CREATE IF NOT EXISTS, CHECK constraints) + migrate()
 server/src/gsm7.js               gsmLength(), fitsOneSms(), smsSafe(), firstFitting(), SMS_LIMIT
 server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone(), normalizePhone()
-server/src/engine.js             createSmsEngine(db) -> handleIncomingSms(phone, body), pushQuestion(); commands, grading, logging
+server/src/engine.js             createSmsEngine(db, {now, llm}) -> handleIncomingSms(phone, body), pushQuestion(); commands, grading, logging
 server/src/practice.js           adaptive QUIZ order, weakest topic, due reviews, streaks, daily cap
 server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*
 server/src/lan.js                lanAddresses(), startupBanner(): LAN IPs + the LAPTOP_URL command printed on startup
@@ -44,8 +46,15 @@ server/src/expr.js               safe expression evaluator (no eval) for value c
 server/src/validate-question.js  validateQuestion(), the ONLY gate for questions
 server/src/seed-data.js          14 maths + 8 science original MCQs (2 per topic) + 3 fake demo students
 server/src/review.js             teacher review CLI (list, approve, edit)
+server/src/snapshots.js          committed teacher decisions: reviews.json (seed question edits/approvals), explanations.json
+server/src/llm/client.js         createLlm(): the only Ollama caller; 8s SMS timeout, returns null on failure, logs latency, prewarm()
+server/src/llm/parse-reply.js    free text -> A-D: regex, then option values in code, then the model (or UNKNOWN)
+server/src/llm/ask.js            ASK: compute detection + per-topic method hints, science guard, maths concept answers
+server/src/validate-explanation.js  validateExplanation(), the ONLY gate for explanations
+server/src/explain-review.js     teacher explanation review CLI (list, approve, reject, edit)
+server/scripts/generateExplanations.js  model drafts for wrong options (3 tries each, validated)
 server/src/seed.js, demo-reset.js
-server/data/                     abhyaas.db, *.local.json (all gitignored)
+server/data/                     abhyaas.db, *.local.json (gitignored); reviews.json, explanations.json (committed, seed questions only)
 client/src/                      React app: App.jsx dashboard, Phone.jsx SMS simulator at /phone
 gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in .last-id, .pending.json (gitignored)
 ```
@@ -68,15 +77,19 @@ gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in
 - Write maths in plain GSM-7: `x^2`, `*`, `/`, `pi`, `22/7`. Never use `²`, `×`, `÷`, `√` or `π`.
 - Each subject's TOPICS message must fit one SMS.
 - New questions start as `needs-review`. Only approved questions go to students.
+- Approvals and edits of seed questions are also written to `server/data/reviews.json`, and approved explanations to `explanations.json`, so `demo:reset` keeps them. Commit those files after a review.
+- Explanations (<=120 chars, shown as "Not quite. <text> Try again: reply A/B/C/D") must pass `validateExplanation()`: GSM-7, no correct letter or value, no "add X to Y" instructions, maths numbers from the question only (a teacher's edit only warns on this), no new science terms.
 - New seed questions must be original. Each wrong option must be a real student mistake, described in its misconception note. Keep the correct letters spread across A-D.
 
 ## SMS engine
 
 - Commands: JOIN <name>, HELP, SUBJECT [MATH|SCI], TOPICS, QUIZ [MATH|SCI|<code>], a bare topic code, a bare subject word (MATH/MATHS/GANIT, SCI/SCIENCE/BIGYAN/VIGYAN), A-D, SCORE (both subjects), ASK <text>. Unknown numbers only get the JOIN prompt.
+- Free text with a question waiting goes through parseReply: regex ("b ho", "mero answer c"), then the typed value against the options, then the model maps it to A-D or UNKNOWN ("Reply A/B/C/D to answer Q12."). The letter is graded by the same code as a plain "B". Model calls run between DB transactions; if the pending question changed meanwhile, nothing is graded.
+- ASK: science (SCI subject or science words) never reaches the model: canned reply + SCI doubt. Maths sums (equations, operators, "solve", 2+ numbers) get a hand-written method hint + "Sent to your teacher too." and an open doubt. Maths concept questions go to the model (<=150 chars); its answer is saved as an answered doubt, and a failure sends "Your question was sent to your teacher." with an open doubt.
 - Wrong first try: the approved explanation for that option, else a generic hint. Never the solution. Wrong second try: answer + solution, session ends.
 - QUIZ order per subject: due review in weakest topic, any due review (first try wrong >= 2 days ago), new in weakest topic, next new, then least recently practised. Weakest = lowest first-try accuracy with >= 2 tries, never 100%.
 - Daily cap: 20 QUIZ-served questions per local day (`origin = 'quiz'`); pushes don't count.
-- Every reply goes through `smsSafe()` and is logged to `messages` and `outbox`. Tests pass a fake clock: `createSmsEngine(db, { now })`.
+- Every reply goes through `smsSafe()` and is logged to `messages` and `outbox`. Tests pass a fake clock and a fake model: `createSmsEngine(db, { now, llm: { chat: async () => '...' } })`. Never call the real model in tests.
 
 ## SMS gateway
 

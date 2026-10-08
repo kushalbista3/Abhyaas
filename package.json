@@ -9,7 +9,9 @@
     "test": "npm test -w server",
     "seed": "npm run seed -w server",
     "demo:reset": "npm run demo:reset -w server",
-    "questions:review": "npm run questions:review -w server --"
+    "questions:review": "npm run questions:review -w server --",
+    "explain:generate": "npm run explain:generate -w server --",
+    "explain:review": "npm run explain:review -w server --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

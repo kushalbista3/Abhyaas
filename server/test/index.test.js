@@ -9,11 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 const INDEX = fileURLToPath(new URL('../src/index.js', import.meta.url));
 
-// Runs `node src/index.js` with a throwaway DB. Env vars win over the root .env.
+// Runs `node src/index.js` with a throwaway DB and no model (port 9 refuses
+// connections), so the startup prewarm never reaches the real Gemma. Env vars
+// win over the root .env.
 function startServer(port) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'abhyaas-index-'));
   const child = spawn(process.execPath, [INDEX], {
-    env: { ...process.env, PORT: String(port), DB_PATH: path.join(dir, 'test.db') },
+    env: { ...process.env, PORT: String(port), DB_PATH: path.join(dir, 'test.db'), OLLAMA_HOST: 'http://127.0.0.1:9' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';

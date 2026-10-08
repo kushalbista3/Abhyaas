@@ -42,6 +42,11 @@ const REPLACEMENTS = Object.fromEntries(
   ].map(([code, text]) => [String.fromCodePoint(code), text]),
 );
 
+// Characters smsSafe() would drop (not GSM-7, no look-alike), e.g. Devanagari.
+export function unsafeChars(text) {
+  return nonGsmChars(text).filter((ch) => !(ch in REPLACEMENTS));
+}
+
 // Every outgoing SMS passes through here: GSM-7 only, at most one SMS.
 // Look-alikes are swapped, other non-GSM characters dropped, and text that is
 // still longer than `limit` septets is cut with "...".

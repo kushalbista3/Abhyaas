@@ -372,7 +372,7 @@ test('ASK is logged as a doubt in the current subject', async () => {
   await send('JOIN Sita');
   assert.equal(await send('ASK'), REPLIES.askUsage);
   await send('SUBJECT SCI');
-  assert.equal(await send('ask Why is the sky blue?'), REPLIES.askSaved);
+  assert.equal(await send('ask Why is the sky blue?'), REPLIES.askScience);
   assert.deepEqual(db.prepare('SELECT subject, text, status FROM doubts').get(), {
     subject: 'SCI', text: 'Why is the sky blue?', status: 'open',
   });

@@ -1,5 +1,6 @@
 // Teacher review of the question bank (CLAUDE.md rule 8: science reaches
-// students only after a teacher approves it).
+// students only after a teacher approves it). Every approve or edit also
+// rewrites server/data/reviews.json, so a reseed keeps it.
 //   npm run questions:review -- list [--all]
 //   npm run questions:review -- approve 15 16,17
 //   npm run questions:review -- edit 15 option_b="Slows down" misconception_c=
@@ -12,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { config } from './config.js';
 import { openDb } from './db.js';
 import { gsmLength } from './gsm7.js';
+import { writeReviewSnapshot } from './snapshots.js';
 import { formatQuestionSms, LETTERS } from './sms.js';
 import { validateQuestion } from './validate-question.js';
 
@@ -156,6 +158,7 @@ function main(argv) {
           console.error(`#${r.id} NOT approved:\n  - ${r.errors.join('\n  - ')}`);
         }
       }
+      writeReviewSnapshot(db, config.snapshotDir);
       return failed ? 1 : 0;
     }
     if (cmd === 'edit') {
@@ -167,6 +170,7 @@ function main(argv) {
         console.error(`#${id} not saved:\n  - ${r.errors.join('\n  - ')}`);
         return 1;
       }
+      writeReviewSnapshot(db, config.snapshotDir);
       const q = fromRow(db.prepare('SELECT * FROM questions WHERE id = ?').get(id));
       console.log(`${describe(q)}\n\nSaved. #${id} needs review again: run approve ${id} when it is right.`);
       return 0;
