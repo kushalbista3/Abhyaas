@@ -1,0 +1,398 @@
+[
+  {
+    "source_ref": "seed:HCF-1",
+    "option": "B",
+    "text": "You made a sign error when factoring x^2+x-6, leading you to think x+2 was common.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:HCF-1",
+    "option": "C",
+    "text": "You found the LCM, not the HCF. The HCF is the common factor, not the product of all factors.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:HCF-1",
+    "option": "D",
+    "text": "You multiplied the common factor from each expression instead of taking it once.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:HCF-2",
+    "option": "A",
+    "text": "You found the HCF using lowest powers instead of the LCM.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:HCF-2",
+    "option": "B",
+    "text": "You multiplied the two expressions instead of taking the highest powers for the LCM.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:HCF-2",
+    "option": "D",
+    "text": "You took the LCM of 6 and 9 but used the lowest powers of a and b.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PCT-1",
+    "option": "A",
+    "text": "You used 13% minus 10% on the marked price instead of applying VAT after discount.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PCT-1",
+    "option": "C",
+    "text": "You stopped after the discount and did not add the 13% VAT.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PCT-1",
+    "option": "D",
+    "text": "You added VAT to the marked price, forgetting the 10% discount first.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PCT-2",
+    "option": "A",
+    "text": "You took 25% of the selling price as profit. Profit % is on the cost price, so the SP is 125% of the CP.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:PCT-2",
+    "option": "B",
+    "text": "You multiplied the selling price by 125%. The SP already includes the profit, so work back to the cost price.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:PCT-2",
+    "option": "C",
+    "text": "You found only the profit, and took it as 25% of the selling price. Profit % is on the cost price.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:INT-1",
+    "option": "B",
+    "text": "You used simple interest. Compound amount includes interest on interest.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:INT-1",
+    "option": "C",
+    "text": "You found only the compound interest, not the total amount. Remember to add the principal.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:INT-1",
+    "option": "D",
+    "text": "You calculated for 1 year only. Remember to account for the 2 years in the compound amount.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:INT-2",
+    "option": "A",
+    "text": "You used simple depreciation. Each year the 20% is taken from the new, lower value.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:INT-2",
+    "option": "C",
+    "text": "You used the growth formula (1+R/100) instead of the depreciation formula (1-R/100).",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:INT-2",
+    "option": "D",
+    "text": "You found only the total depreciation, not the final value after 2 years.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:ALG-1",
+    "option": "A",
+    "text": "You added the powers 3 and 2 in (x^3)^2. Check the rule for a power of a power, then deal with x^-4.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:ALG-1",
+    "option": "B",
+    "text": "You added 6+4 instead of using the minus sign for x^-4.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:ALG-1",
+    "option": "C",
+    "text": "You multiplied all the powers: 3*2*4. Check which index rule fits each part separately.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:ALG-2",
+    "option": "A",
+    "text": "You made a sign error. (x+2)(x+3) is x^2+5x+6, not x^2-5x+6.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:ALG-2",
+    "option": "B",
+    "text": "You picked factors of 6 but did not check the sum equals 5.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:ALG-2",
+    "option": "D",
+    "text": "You read the coefficients 5 and 6 as the roots. The roots are not the coefficients.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:GEO-1",
+    "option": "A",
+    "text": "You forgot the 1/2. A triangle's area is half of base times height.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:GEO-1",
+    "option": "C",
+    "text": "You used 13 cm, the longest side, as the height. In a right triangle the two shorter sides are base and height.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:GEO-1",
+    "option": "D",
+    "text": "You used Heron's formula but forgot to take the square root at the end.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:GEO-2",
+    "option": "B",
+    "text": "You found the cylinder volume, forgetting the 1/3 factor for the cone.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:GEO-2",
+    "option": "C",
+    "text": "You used r instead of r^2 in the volume formula. Check the power of the radius.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:GEO-2",
+    "option": "D",
+    "text": "You used the diameter as the radius in the volume formula.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:SET-1",
+    "option": "A",
+    "text": "You found n(T u C)=90, which is those who like at least one, not neither.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:SET-1",
+    "option": "B",
+    "text": "You left out the 20 who like both when finding those who like at least one drink.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:SET-1",
+    "option": "C",
+    "text": "You counted only those who like one drink, not the total who like tea or coffee.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:SET-2",
+    "option": "A",
+    "text": "You forgot the 10 who read neither. First find how many read at least one paper.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:SET-2",
+    "option": "C",
+    "text": "You found how many read at least one paper. The overlap is the group counted twice in 50+35.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:SET-2",
+    "option": "D",
+    "text": "You found those who read only K, not the number who read both K and G.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PROB-1",
+    "option": "A",
+    "text": "You thought all 11 possible sums were equally likely. They are not.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PROB-1",
+    "option": "B",
+    "text": "You counted 7 outcomes just because the sum is 7. Write out the dice pairs with sum 7.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:PROB-1",
+    "option": "D",
+    "text": "You missed that order matters. (1,6) is different from (6,1) when counting outcomes.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PROB-2",
+    "option": "B",
+    "text": "You treated the draws as with replacement, which is wrong for this problem.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PROB-2",
+    "option": "C",
+    "text": "You calculated P(red then blue) instead of P(both red).",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PROB-2",
+    "option": "D",
+    "text": "You only found P(red) for the first draw, not P(both red). Remember the second draw changes the total.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PHY-1",
+    "option": "A",
+    "text": "You mixed mass and weight. Mass does not change, even if weight on the Moon is 1/6 of Earth's.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PHY-1",
+    "option": "B",
+    "text": "You used weight. Weight is a force in Newtons, not mass in kg.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PHY-1",
+    "option": "C",
+    "text": "You thought less gravity means no mass. Mass is the amount of matter, and it stays the same on the Moon.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:PHY-2",
+    "option": "A",
+    "text": "You thought light speeds up in glass. Remember, glass is optically denser than air.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:PHY-2",
+    "option": "C",
+    "text": "You thought light always moves at 3x10^8 m/s. Remember, glass is optically denser than air.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:PHY-2",
+    "option": "D",
+    "text": "You thought refraction changes colour. Frequency stays the same; speed and wavelength change.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-1",
+    "option": "B",
+    "text": "You thought bubbles must be oxygen, but HCl has no oxygen to give.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-1",
+    "option": "C",
+    "text": "You thought the chlorine from HCl is released. It stays in the ZnCl2 salt.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-1",
+    "option": "D",
+    "text": "You mixed up zinc with acid + carbonate. Zinc metal has no carbon.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-2",
+    "option": "A",
+    "text": "You used atomic number as group number. Group is not the atomic number.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-2",
+    "option": "B",
+    "text": "You used the number of shells (3) for the group. Shells tell the period, not the group.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:CHEM-2",
+    "option": "D",
+    "text": "You took the 8 electrons of the second shell, not the outermost shell's one electron.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:BIO-1",
+    "option": "B",
+    "text": "You thought t was dominant. Remember, T is dominant over t when T is present.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:BIO-1",
+    "option": "C",
+    "text": "That 3 tall:1 dwarf ratio is for F2, not the F1 plants.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:BIO-1",
+    "option": "D",
+    "text": "You thought traits blend. T is dominant, so Tt plants are fully tall, not medium.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:BIO-2",
+    "option": "A",
+    "text": "You thought arteries always carry oxygen-rich blood. The pulmonary artery takes deoxygenated blood to the lungs.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:BIO-2",
+    "option": "B",
+    "text": "You thought the aorta carried oxygen-rich blood from the lungs. It goes from the heart to the body.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:BIO-2",
+    "option": "C",
+    "text": "You thought the vein entering the heart was the vena cava. That vein brings deoxygenated blood from the body.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:EARTH-1",
+    "option": "A",
+    "text": "You mixed up global warming with acid rain. SO2 causes acid rain, not the main warming gas.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:EARTH-1",
+    "option": "B",
+    "text": "You mixed global warming with ozone depletion. Ozone depletion is not caused by the gas from burning fuels.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:EARTH-1",
+    "option": "D",
+    "text": "You thought the most plentiful gas causes warming; nitrogen does not trap heat.",
+    "model": "gemma"
+  },
+  {
+    "source_ref": "seed:EARTH-2",
+    "option": "A",
+    "text": "The word year made you think it measures time. Think about what light travels in one year.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:EARTH-2",
+    "option": "C",
+    "text": "You thought it is the speed of light. A light year is not a speed; think about what light travels in one year.",
+    "model": "teacher"
+  },
+  {
+    "source_ref": "seed:EARTH-2",
+    "option": "D",
+    "text": "The word light made you think it measures how bright a star is. It is used for stars, but not for brightness.",
+    "model": "teacher"
+  }
+]
