@@ -1,13 +1,12 @@
 import { gsmLength, SMS_LIMIT } from './gsm7.js';
 import { formatQuestionSms, LETTERS, SUBJECTS, TOPIC_CODES } from './sms.js';
-import { parse, sample } from './expr.js';
+import { numericValue, parse, sample } from './expr.js';
 
 // Worst-case id width so a question that passes still fits once imported.
 const WORST_CASE_ID = 9999;
 
-// "Rs 1,200", "30 cm^2", "2 and 3", "x^2-1" -> list of sampled value vectors,
-// or null if it is not maths we can evaluate.
-function valueOf(raw) {
+// "Rs 1,200" -> "1200", "30 cm^2" -> "30", "20%" -> "20": the bare value text.
+function stripUnits(raw) {
   let s = String(raw ?? '').trim().toLowerCase();
   s = s.replace(/^rs\.?\s*/, '');
   s = s.replace(/(\d),(?=\d{3}\b)/g, '$1');
@@ -22,6 +21,13 @@ function valueOf(raw) {
       .trim();
     if (s === before) break;
   }
+  return s;
+}
+
+// "Rs 1,200", "30 cm^2", "2 and 3", "x^2-1" -> list of sampled value vectors,
+// or null if it is not maths we can evaluate.
+function valueOf(raw) {
+  const s = stripUnits(raw);
   const parts = s.split(/\s*(?:,|;|\band\b|\bor\b)\s*/).filter(Boolean);
   if (parts.length === 0) return null;
   const vectors = [];
@@ -73,6 +79,35 @@ export function finalValue(solution) {
   return segs[segs.length - 1].trim();
 }
 
+// Decimal places written in a number ('3.14' -> 2), or 0.
+const decimals = (s) => (/^-?\d*\.(\d+)$/.exec(s.trim())?.[1].length ?? 0);
+const shown = (v) => String(Number(v.toFixed(4)));
+
+// Recomputes every "a = b" in a maths solution where both sides are plain
+// numbers ("1200*0.9=1080", "Rs 1,200*10/100=Rs 120"); sides with a variable
+// ("SP", "x^2-4") or words are skipped. A written decimal may be rounded to
+// its last place (22/7=3.14); a whole number must be exact.
+export function arithmeticErrors(solution) {
+  const errors = [];
+  const statements = String(solution ?? '').split(/;|\n|\.\s+|,\s+/);
+  for (const st of statements) {
+    const sides = st.split('=');
+    for (let k = 0; k + 1 < sides.length; k++) {
+      const [ta, tb] = [stripUnits(sides[k]), stripUnits(sides[k + 1])];
+      const a = numericValue(ta);
+      const b = numericValue(tb);
+      if (a === null || b === null) continue;
+      const places = Math.max(decimals(ta), decimals(tb));
+      const tol = places ? 0.5 * 10 ** -places + 1e-12 : 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+      if (Math.abs(a - b) > tol) {
+        const step = `${sides[k].trim()}=${sides[k + 1].trim()}`;
+        errors.push(`solution step "${step}" is wrong: ${sides[k].trim()} = ${shown(a)}`);
+      }
+    }
+  }
+  return errors;
+}
+
 function parseMisconceptions(m) {
   if (typeof m === 'string') {
     try { return JSON.parse(m); } catch { return null; }
@@ -122,6 +157,7 @@ export function validateQuestion(q) {
   else if (solLen > SMS_LIMIT) errors.push(`solution is ${solLen} chars, max ${SMS_LIMIT}`);
   // Only maths can be checked by code. A science solution is a short
   // explanation; a teacher checks it before approval (CLAUDE.md rule 8).
+  if (isMath && solution) errors.push(...arithmeticErrors(solution));
   if (isMath && solution && correctOk) {
     const want = q[`option_${correct.toLowerCase()}`];
     if (want && !sameValue(finalValue(solution), want)) {

@@ -10,7 +10,7 @@ const db = openDb(config.dbPath);
 const llm = createLlm();
 const engine = createSmsEngine(db, { llm });
 const push = createDailyPush(db, engine, { time: config.dailyPushTime });
-const app = createApp(db, engine, { push });
+const app = createApp(db, engine, { push, llm });
 
 // 0.0.0.0 so the SMS gateway phone on the same LAN can reach this laptop.
 // Express 5 passes a listen failure (e.g. port taken) to this callback instead

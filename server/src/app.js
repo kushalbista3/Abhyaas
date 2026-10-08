@@ -1,8 +1,13 @@
 import express from 'express';
+import { generateExplanations } from '../scripts/generateExplanations.js';
 import { config } from './config.js';
 import { createDailyPush } from './daily-push.js';
 import { SmsTextError, createSmsEngine } from './engine.js';
+import { createGemini } from './gemini.js';
+import { createLlm } from './llm/client.js';
+import { ImportError, checkCard, extractCards } from './photo-import.js';
 import { sqlTime } from './practice.js';
+import { writeImportsFile } from './snapshots.js';
 import { SUBJECTS, formatQuestionSms, maskPhone, normalizePhone } from './sms.js';
 import { dashboard } from './stats.js';
 import { TeacherError, broadcast, listDoubts, replyToDoubt } from './teacher.js';
@@ -12,6 +17,9 @@ export const GATEWAY_FRESH_MS = 90_000;
 const OLLAMA_PROBE_MS = 1500;
 const SEEN_SMS_MAX = 1000;
 const MESSAGE_LOG_LIMIT = 20;
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const PHOTO_LIMIT = '15mb';
+const CARD_FIELDS = ['topic', 'stem', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_option', 'solution'];
 
 // Is Ollama up, and is the configured model pulled? A probe, not an LLM call.
 async function probeOllama(host, model) {
@@ -34,6 +42,10 @@ export function createApp(
     ollamaHost = config.ollamaHost,
     ollamaModel = config.ollamaModel,
     push = createDailyPush(db, engine, { now: () => new Date(now()), time: config.dailyPushTime }),
+    gemini = createGemini(),
+    llm = createLlm(),
+    importsFile = config.importsFile,
+    rng = Math.random,
   } = {},
 ) {
   const app = express();
@@ -70,6 +82,69 @@ export function createApp(
       throw err;
     }
   }
+
+  // Teacher photo import (maths only). The photo is a Buffer in this request
+  // only: never written to disk, never logged.
+  app.post('/api/import/photo', express.raw({ type: PHOTO_TYPES, limit: PHOTO_LIMIT }), async (req, res) => {
+    if (!gemini) {
+      return res.status(503).json({ error: 'Photo import is off: set GEMINI_API_KEY and GEMINI_MODEL in .env, then restart.' });
+    }
+    if (!Buffer.isBuffer(req.body) || !req.body.length) {
+      return res.status(415).json({ error: `Send a photo (${PHOTO_TYPES.join(', ')}).` });
+    }
+    try {
+      res.json(await extractCards(gemini, { image: req.body, mimeType: req.get('content-type') }, { rng }));
+    } catch (err) {
+      if (err instanceof ImportError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  });
+
+  // Approve one card: every check runs again here, whatever the page showed.
+  app.post('/api/import/questions', (req, res) => {
+    const body = req.body ?? {};
+    const card = { ...Object.fromEntries(CARD_FIELDS.map((f) => [f, String(body[f] ?? '').trim()])), subject: 'MATH' };
+    card.misconceptions = body.misconceptions && typeof body.misconceptions === 'object' ? body.misconceptions : {};
+    card.unsuitable = body.unsuitable;
+    const { unsuitable, errors } = checkCard(card);
+    if (unsuitable) return res.status(400).json({ error: `Not SMS-suitable: ${unsuitable}`, errors: [unsuitable] });
+    if (errors.length) return res.status(400).json({ error: 'The card has problems.', errors });
+    const dup = db.prepare("SELECT id FROM questions WHERE source = 'photo-import' AND stem = ?").get(card.stem);
+    if (dup) return res.status(409).json({ error: `Already imported as #${dup.id}.` });
+    const misconceptions = Object.fromEntries(
+      Object.entries(card.misconceptions).map(([l, n]) => [l, String(n ?? '').trim()]).filter(([, n]) => n),
+    );
+    const { lastInsertRowid } = db
+      .prepare(`INSERT INTO questions (subject, topic, stem, option_a, option_b, option_c, option_d,
+          correct_option, solution, misconceptions, source, source_ref, status)
+        VALUES ('MATH', @topic, @stem, @option_a, @option_b, @option_c, @option_d,
+          @correct_option, @solution, @misconceptions, 'photo-import', @source_ref, 'approved')`)
+      .run({ ...card, misconceptions: JSON.stringify(misconceptions), source_ref: String(body.source_ref ?? '').trim() || null });
+    const id = Number(lastInsertRowid);
+    try {
+      writeImportsFile(db, importsFile);
+    } catch (err) {
+      console.error(`Photo import: could not write the local imports file: ${err.code ?? err.message}`);
+      return res.status(201).json({ id, warning: 'Saved in the database, but the local imports file could not be written.' });
+    }
+    res.status(201).json({ id });
+  });
+
+  // Local Gemma drafts explanations for approved imports, in the background
+  // (it can take minutes). Teachers review them with npm run explain:review.
+  // checked counts options tried so far (progress); drafted/failed are final.
+  let explainJob = { running: false, checked: 0, drafted: 0, failed: 0, error: null, done: false };
+  app.get('/api/import/explanations', (req, res) => res.json(explainJob));
+  app.post('/api/import/explanations', (req, res) => {
+    if (explainJob.running) return res.status(202).json(explainJob);
+    explainJob = { running: true, checked: 0, drafted: 0, failed: 0, error: null, done: false };
+    const job = explainJob;
+    generateExplanations(db, llm, { source: 'photo-import', log: () => job.checked++ })
+      .then((r) => Object.assign(job, { drafted: r.drafted, failed: r.failed.length }))
+      .catch((err) => Object.assign(job, { error: err.message }))
+      .finally(() => Object.assign(job, { running: false, done: true }));
+    res.status(202).json(job);
+  });
 
   app.get('/api/health', async (req, res) => {
     let questions = null;

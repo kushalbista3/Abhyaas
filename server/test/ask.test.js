@@ -141,3 +141,13 @@ test('maths concept ASK: model answer saved as answered; failure goes to the tea
   await noModel.send('JOIN Sita');
   assert.equal(await noModel.send('ASK what is a set'), REPLIES.askTeacher);
 });
+
+test('ALG method hint fits linear equations too', async () => {
+  assert.match(METHOD_HINTS.ALG, /get x on one side: undo \+ or - first, then \* or \//);
+  assert.ok(fitsOneSms(METHOD_HINTS.ALG + COMPUTE_TAIL));
+  const llm = fakeLlm(said('should not be used'));
+  const { send } = setup(llm);
+  await send('JOIN Sita');
+  assert.equal(await send('ASK solve 2x+3=7'), METHOD_HINTS.ALG + COMPUTE_TAIL);
+  assert.equal(llm.calls.length, 0);
+});

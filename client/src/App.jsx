@@ -93,6 +93,7 @@ export default function App() {
           ))}
         </div>
         <span className={`gateway ${connected ? 'on' : 'off'}`}>Phone gateway: {connected ? 'connected' : 'not connected'}</span>
+        <a href="/import">Import questions</a>
         <a href="/phone">Phone simulator</a>
       </header>
       {error && <p className="error">Server: {error}</p>}

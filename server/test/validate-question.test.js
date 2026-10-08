@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateQuestion, sameValue, sameText } from '../src/validate-question.js';
+import { arithmeticErrors, validateQuestion, sameValue, sameText } from '../src/validate-question.js';
 
 const good = () => ({
   subject: 'MATH',
@@ -133,4 +133,18 @@ test('requires a misconception note for every wrong option, none for the correct
 test('reports all errors at once', () => {
   const errs = errorsOf({ topic: 'X', option_a: '', misconceptions: {} });
   assert.ok(errs.length >= 3, errs.join('\n'));
+});
+
+test('solution arithmetic is recomputed, and a wrong step names the corrected value', () => {
+  assert.deepEqual(arithmeticErrors('SP=1200*0.9=1000'), ['solution step "1200*0.9=1000" is wrong: 1200*0.9 = 1080']);
+  assert.deepEqual(arithmeticErrors('2*3=7, so 6*1=6'), ['solution step "2*3=7" is wrong: 2*3 = 6']);
+  assert.match(arithmeticErrors('Area=pi*7^2=154').join(), /pi\*7\^2 = 153\.938/, 'pi is not 22/7');
+  for (const ok of [
+    'Rs 1,200*10/100=Rs 120', '22/7=3.14', 'Area=1/2*5*12=30 cm^2', '5^2+12^2=13^2, so it is right-angled',
+    'x^2-4=(x-2)(x+2)', 'VAT=13% of 1800=234', '36 outcomes. Sum 7: (1,6),(2,5), 6 ways. P=6/36=1/6',
+  ]) {
+    assert.deepEqual(arithmeticErrors(ok), [], ok);
+  }
+  assert.match(errorsOf({ solution: 'SP=12000*0.9=10000' }).join(), /is wrong: 12000\*0.9 = 10800/);
+  assert.deepEqual(sciErrorsOf({ solution: 'Speed=2*3=7 is not checked for science.' }), []);
 });

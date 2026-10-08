@@ -34,11 +34,11 @@ test('seed applies review and explanation snapshots, and stays idempotent', () =
     reviews: { 'seed:PHY-1': { status: 'approved', solution: 'Mass does not change: still 60 kg.' } },
     explanations: [{ source_ref: 'seed:PCT-1', option: 'C', text: 'You stopped after the discount.', model: 'teacher' }],
   };
-  assert.deepEqual(seed(db, snapshots), { questions: 22, students: 3, explanations: 1 });
+  assert.deepEqual(seed(db, snapshots), { questions: 22, students: 3, explanations: 1, imported: 0 });
   const row = db.prepare("SELECT status, solution FROM questions WHERE source_ref = 'seed:PHY-1'").get();
   assert.deepEqual(row, { status: 'approved', solution: 'Mass does not change: still 60 kg.' });
   assert.deepEqual(explanationSnapshot(db), snapshots.explanations);
-  assert.deepEqual(seed(db, snapshots), { questions: 0, students: 0, explanations: 0 });
+  assert.deepEqual(seed(db, snapshots), { questions: 0, students: 0, explanations: 0, imported: 0 });
 });
 
 test('seed refuses a snapshot edit that fails validation', () => {

@@ -45,8 +45,8 @@ test('CHECK constraints reject bad enum values', () => {
 
 test('seed is idempotent', () => {
   const db = openDb(':memory:');
-  assert.deepEqual(seed(db), { questions: 22, students: 3, explanations: 0 });
-  assert.deepEqual(seed(db), { questions: 0, students: 0, explanations: 0 });
+  assert.deepEqual(seed(db), { questions: 22, students: 3, explanations: 0, imported: 0 });
+  assert.deepEqual(seed(db), { questions: 0, students: 0, explanations: 0, imported: 0 });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM questions').get().n, 22);
 });
 

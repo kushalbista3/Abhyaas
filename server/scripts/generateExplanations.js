@@ -48,11 +48,12 @@ export function explanationPrompt(q, letter) {
 }
 
 // Wrong options of approved questions with no approved explanation (and,
-// unless redo, no draft either).
-function targets(db, { redo }) {
+// unless redo, no draft either). source: only 'seed' or 'photo-import' questions.
+function targets(db, { redo, source }) {
   const has = db.prepare('SELECT status FROM explanations WHERE question_id = ? AND option = ?');
   const out = [];
-  for (const q of db.prepare("SELECT * FROM questions WHERE status = 'approved' ORDER BY id").all()) {
+  const sql = `SELECT * FROM questions WHERE status = 'approved'${source ? ' AND source = ?' : ''} ORDER BY id`;
+  for (const q of db.prepare(sql).all(...(source ? [source] : []))) {
     for (const l of LETTERS) {
       if (l === q.correct_option) continue;
       const statuses = has.all(q.id, l).map((r) => r.status);
@@ -81,11 +82,11 @@ async function draftFor(llm, q, letter) {
   return { text: null, attempt: MAX_TRIES, errors };
 }
 
-export async function generateExplanations(db, llm, { redo = false, log = console.log } = {}) {
+export async function generateExplanations(db, llm, { redo = false, source = null, log = console.log } = {}) {
   const insert = db.prepare("INSERT INTO explanations (question_id, option, text, status, model) VALUES (?, ?, ?, 'draft', 'gemma')");
   const dropDrafts = db.prepare("DELETE FROM explanations WHERE question_id = ? AND option = ? AND status = 'draft'");
   const result = { drafted: 0, failed: [] };
-  for (const { q, letter } of targets(db, { redo })) {
+  for (const { q, letter } of targets(db, { redo, source })) {
     const { text, attempt, errors } = await draftFor(llm, q, letter);
     if (text) {
       db.transaction(() => {

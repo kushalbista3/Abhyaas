@@ -25,7 +25,7 @@ SEE (Nepal Grade 10) maths and science MCQ practice over SMS for students on key
 |---|---|
 | `npm run dev` | server (`node --watch`) + client (`vite --host`) via concurrently |
 | `npm test` | server tests (`node:test`, files in `server/test/`) |
-| `npm run seed` | validate and insert the seed questions and demo students, then apply the committed snapshots (idempotent) |
+| `npm run seed` | validate and insert the seed questions and demo students, apply the committed snapshots, restore approved photo imports from the local file (idempotent) |
 | `npm run demo:reset` | delete the local DB, reseed (teacher approvals come back from the snapshots), then 5 days of demo practice + 2 open doubts |
 | `npm run questions:review` | `list [--all]`, `approve <ids>`, `edit <id> [field=value ...]` (no fields opens `$EDITOR`); writes `reviews.json` |
 | `npm run explain:generate` | local Gemma drafts explanations for wrong options of approved questions (`--redo` replaces drafts) |
@@ -34,7 +34,7 @@ SEE (Nepal Grade 10) maths and science MCQ practice over SMS for students on key
 ## Layout
 
 ```
-server/src/config.js             loads .env; DB_PATH, PORT, OLLAMA_HOST, OLLAMA_MODEL, GEMINI_MODEL, SNAPSHOT_DIR
+server/src/config.js             loads .env; DB_PATH, PORT, OLLAMA_HOST, OLLAMA_MODEL, GEMINI_MODEL, SNAPSHOT_DIR, importsFile
 server/src/db.js                 openDb() + full schema (CREATE IF NOT EXISTS, CHECK constraints) + migrate()
 server/src/gsm7.js               gsmLength(), fitsOneSms(), smsSafe(), firstFitting(), SMS_LIMIT
 server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone(), normalizePhone()
@@ -44,13 +44,15 @@ server/src/stats.js              dashboard queries per subject: overview, topic 
 server/src/teacher.js            doubts inbox, replyToDoubt(), broadcast(): all via engine.queueSms()
 server/src/daily-push.js         createDailyPush(): DAILY_PUSH_TIME scheduler, topic override, sendNow()
 server/src/demo-activity.js      seedDemoActivity(): 5 days of demo SMS through the real engine (demo:reset only)
-server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel, push}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*, dashboard routes
+server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel, push, gemini, llm, importsFile, rng}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*, /api/import/*, dashboard routes
 server/src/lan.js                lanAddresses(), startupBanner(): LAN IPs + the LAPTOP_URL command printed on startup
-server/src/expr.js               safe expression evaluator (no eval) for value comparison
-server/src/validate-question.js  validateQuestion(), the ONLY gate for questions
+server/src/expr.js               safe expression evaluator (no eval) for value comparison; numericValue() for plain sums
+server/src/validate-question.js  validateQuestion(), the ONLY gate for questions; arithmeticErrors()
+server/src/photo-import.js       teacher photo import (no Node APIs, the page imports it): instruction + budget, toCard() shuffle, unsuitableReason(), checkCard(), extractCards()
+server/src/gemini.js             createGemini(): the only @google/genai caller; key scrubbed from errors, never logged
 server/src/seed-data.js          14 maths + 8 science original MCQs (2 per topic) + 3 fake demo students
 server/src/review.js             teacher review CLI (list, approve, edit)
-server/src/snapshots.js          committed teacher decisions: reviews.json (seed question edits/approvals), explanations.json
+server/src/snapshots.js          committed teacher decisions: reviews.json (seed question edits/approvals), explanations.json; writeImportsFile()/loadImports() for the local imports file
 server/src/llm/client.js         createLlm(): the only Ollama caller; 8s SMS timeout, returns null on failure, logs latency, prewarm()
 server/src/llm/parse-reply.js    free text -> A-D: regex, then option values in code, then the model (or UNKNOWN)
 server/src/llm/ask.js            ASK: compute detection + per-topic method hints, science guard, maths concept answers
@@ -58,8 +60,8 @@ server/src/validate-explanation.js  validateExplanation(), the ONLY gate for exp
 server/src/explain-review.js     teacher explanation review CLI (list, approve, reject, edit)
 server/scripts/generateExplanations.js  model drafts for wrong options (3 tries each, validated)
 server/src/seed.js, demo-reset.js
-server/data/                     abhyaas.db, *.local.json (gitignored); reviews.json, explanations.json (committed, seed questions only)
-client/src/                      React app: App.jsx dashboard at /, SmsBox.jsx (live GSM-7 counter, imports server/src/gsm7.js), Phone.jsx SMS simulator at /phone
+server/data/                     abhyaas.db, imported-questions.local.json (gitignored); reviews.json, explanations.json (committed, seed questions only)
+client/src/                      React app: App.jsx dashboard at /, SmsBox.jsx (live GSM-7 counter, imports server/src/gsm7.js), Phone.jsx SMS simulator at /phone, Import.jsx photo import at /import
 gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in .last-id, .pending.json (gitignored)
 ```
 
@@ -75,7 +77,7 @@ gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in
   - There are 4 non-empty, different options. Maths compares **values**: `2/4`=`1/2`, `Rs 1,200`=`1200`, and `x^2-1`=`(x-1)(x+1)` all count as equal. Science compares text (case and spacing ignored), because a value check reads words as algebra (`Ohm`=`Mho`).
   - `correct_option` is A-D.
   - The full question SMS is ≤160. It is measured with worst-case id `Q9999`.
-  - The solution is ≤160. For maths, its text after the last `=` must equal the correct option's value. For science, it is a short explanation that a teacher checks.
+  - The solution is ≤160. For maths, its text after the last `=` must equal the correct option's value, and every `a = b` step where both sides are plain numbers is recomputed (`arithmeticErrors()`; the error names the corrected value; a written decimal may be rounded to its last place). For science, it is a short explanation that a teacher checks.
   - Each wrong option has a misconception note.
 - SMS question format: `Q{id} {TOPIC}\n{stem}\nA) ..\nB) ..\nC) ..\nD) ..\nReply A/B/C/D`.
 - Write maths in plain GSM-7: `x^2`, `*`, `/`, `pi`, `22/7`. Never use `²`, `×`, `÷`, `√` or `π`.
@@ -84,6 +86,14 @@ gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in
 - Approvals and edits of seed questions are also written to `server/data/reviews.json`, and approved explanations to `explanations.json`, so `demo:reset` keeps them. Commit those files after a review.
 - Explanations (<=120 chars, shown as "Not quite. <text> Try again: reply A/B/C/D") must pass `validateExplanation()`: GSM-7, no correct letter or value, no "add X to Y" instructions, maths numbers from the question only, no new science terms. A teacher's edit only warns on those two checks; Gemma drafts must pass all of them.
 - New seed questions must be original. Each wrong option must be a real student mistake, described in its misconception note. Keep the correct letters spread across A-D.
+
+## Photo import (teacher, maths only)
+
+- `/import` (linked from the dashboard). The photo is POSTed raw to `/api/import/photo` (`express.raw`, 15 MB), held in memory for that request only, never stored or logged, and sent to `GEMINI_MODEL`. One retry on a 5xx. Without `GEMINI_API_KEY`/`GEMINI_MODEL` the route returns 503.
+- The instruction (built in `photo-import.js`) asks for every numbered sub-part, then one self-contained card per sub-part (`source_ref` like `1(c)`), a topic code or OTHER, plain words for sets (bars = complements), a solution of ≤2 steps under 100 chars ending `= <answer>`, and 3 wrong answers with misconception notes. The stem+options budget is computed in code from the SMS skeleton. JSON is asked for in words (Gemma on the Gemini API has no JSON mode).
+- Code does the rest: options shuffled (Fisher-Yates), `validateQuestion()` (with the arithmetic check), and `unsuitableReason()` (model flag, OTHER, or compare/explain/justify/draw/prove/construct/show that). The page shows "Found N sub-parts, M cards returned", red cards with reasons, greyed unsuitable cards with Discard only.
+- Approve (`POST /api/import/questions`) re-runs every check, refuses a stem already imported (409), saves `status = 'approved'`, `source = 'photo-import'`, and rewrites `server/data/imported-questions.local.json` (gitignored, never commit). `seed`/`demo:reset` restore it.
+- "Draft explanations" runs `generateExplanations(db, llm, { source: 'photo-import' })` in the background (local Gemma); drafts are reviewed with `npm run explain:review`.
 
 ## SMS engine
 

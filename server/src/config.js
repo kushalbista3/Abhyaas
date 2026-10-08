@@ -12,6 +12,8 @@ export const config = {
   dbPath: path.resolve(ROOT, process.env.DB_PATH || 'server/data/abhyaas.db'),
   // Committed snapshots of teacher approvals (reviews.json, explanations.json).
   snapshotDir: path.resolve(ROOT, process.env.SNAPSHOT_DIR || 'server/data'),
+  // Approved photo imports (may be copyrighted): gitignored, never committed.
+  importsFile: path.resolve(ROOT, 'server/data/imported-questions.local.json'),
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:e4b',
   ollamaHost: (process.env.OLLAMA_HOST || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
   geminiModel: process.env.GEMINI_MODEL || '',

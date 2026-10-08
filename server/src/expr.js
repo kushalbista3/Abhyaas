@@ -100,3 +100,14 @@ const SAMPLE_POINTS = (() => {
 export function sample(fn) {
   return SAMPLE_POINTS.map((vars) => fn(vars));
 }
+
+// Value of a plain arithmetic expression ('1200*0.9', '22/7*7^2'), or null
+// if it does not parse or has a variable (then it is algebra, not a sum).
+export function numericValue(src) {
+  const tokens = tokenize(String(src).toLowerCase());
+  if (!tokens || tokens.some((t) => t.t === 'var')) return null;
+  const fn = parse(src);
+  if (!fn) return null;
+  const v = fn({});
+  return Number.isFinite(v) ? v : null;
+}
