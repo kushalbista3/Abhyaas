@@ -30,6 +30,40 @@ function usePoll(load, ms, deps) {
   }, deps);
 }
 
+const TAB_KEY = 'abhyaas.tab';
+const TABS = [
+  { id: 'class', label: 'Class' },
+  { id: 'mistakes', label: 'Mistakes' },
+  { id: 'doubts', label: 'Questions from students' },
+  { id: 'send', label: 'Send SMS' },
+  { id: 'messages', label: 'Messages' },
+];
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Up to 3 plain lines for the top of the page. Each points at a tab and the
+// element to scroll to.
+function todayLines(stats, doubts) {
+  const lines = [];
+  const weak = stats?.topics?.[0];
+  if (weak) {
+    lines.push({ text: `Weakest topic: ${weak.name} (${weak.pct}% right first time)`, tab: 'class', target: 'weak-topics' });
+  }
+  // wrongCount counts first tries, and a review can serve a student the same
+  // question again, so it says "times", not "students".
+  const mistake = (stats?.misconceptions ?? []).filter((m) => m.wrongOption).reduce((a, b) => (!a || b.wrongCount > a.wrongCount ? b : a), null);
+  if (mistake) {
+    lines.push({
+      text: `Most common mistake: Q${mistake.id}, answer ${mistake.wrongOption} chosen ${plural(mistake.wrongCount, 'time', 'times')}`,
+      tab: 'mistakes',
+      target: `mistake-${mistake.id}`,
+    });
+  }
+  if (doubts?.length) {
+    lines.push({ text: `${plural(doubts.length, 'student question', 'student questions')} waiting`, tab: 'doubts', target: 'doubts' });
+  }
+  return lines;
+}
+
 export default function App() {
   const [subject, setSubjectState] = useState(() => {
     try {
@@ -38,6 +72,16 @@ export default function App() {
       return 'MATH';
     }
   });
+  const [tab, setTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem(TAB_KEY);
+      return TABS.some((t) => t.id === saved) ? saved : 'class';
+    } catch {
+      return 'class';
+    }
+  });
+  // { id, at }: the element to scroll to once its tab has rendered.
+  const [focus, setFocus] = useState(null);
   const [stats, setStats] = useState(null);
   const [doubts, setDoubts] = useState(null);
   const [live, setLive] = useState(null);
@@ -53,6 +97,15 @@ export default function App() {
       localStorage.setItem(SUBJECT_KEY, s);
     } catch {
       // private window: the switch just isn't remembered
+    }
+  }
+
+  function setTab(t) {
+    setTabState(t);
+    try {
+      localStorage.setItem(TAB_KEY, t);
+    } catch {
+      // private window: the tab just isn't remembered
     }
   }
 
@@ -75,15 +128,23 @@ export default function App() {
   useEffect(() => {
     getJson('/api/push').then(setPush).catch((e) => setError(e.message));
   }, []);
+  useEffect(() => {
+    if (focus) document.getElementById(focus.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [focus, tab]);
 
   const connected = live?.gateway?.mode === 'termux';
+  const today = todayLines(stats, doubts);
+  const go = (line) => {
+    setTab(line.tab);
+    setFocus({ id: line.target, at: Date.now() });
+  };
 
   return (
     <main className="dash">
       <header className="dash-head">
         <div>
           <h1>Abhyaas</h1>
-          <p className="sub">SEE practice by SMS · Teacher dashboard</p>
+          <p className="sub">SEE practice by SMS · Teacher page</p>
         </div>
         <div className="switch" role="group" aria-label="Subject">
           {Object.entries(SUBJECT_NAMES).map(([code, name]) => (
@@ -92,21 +153,57 @@ export default function App() {
             </button>
           ))}
         </div>
-        <span className={`gateway ${connected ? 'on' : 'off'}`}>Phone gateway: {connected ? 'connected' : 'not connected'}</span>
-        <a href="/import">Import questions</a>
+        <span className={`gateway ${connected ? 'on' : 'off'}`}>SMS phone: {connected ? 'connected' : 'not connected'}</span>
+        <a href="/import">Add questions from a photo</a>
         <a href="/phone">Phone simulator</a>
       </header>
-      {error && <p className="error">Server: {error}</p>}
+      {error && <p className="error">Cannot reach the laptop server: {error}</p>}
 
-      <div className="grid">
-        <Overview overview={stats?.overview} subject={subject} />
-        <WeakTopics topics={stats?.topics} subject={subject} />
-        <Students rows={stats?.students} subject={subject} />
-        <Misconceptions rows={stats?.misconceptions} />
-        <Doubts doubts={doubts} onSent={refresh} />
-        <Broadcast students={stats?.overview.students} onSent={refresh} />
-        <DailyPush push={push} setPush={setPush} onSent={refresh} />
-        <MessageLog messages={live?.messages} />
+      <section className="today" aria-label="Today">
+        <h2>Today · {SUBJECT_NAMES[subject]}</h2>
+        {!stats ? (
+          <Loading />
+        ) : today.length ? (
+          <ul>
+            {today.map((line) => (
+              <li key={line.target}>
+                <button className="today-line" onClick={() => go(line)}>
+                  {line.text} <span aria-hidden="true">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">No answers yet. Students start by texting JOIN and their name.</p>
+        )}
+      </section>
+
+      <nav className="tabs" role="tablist" aria-label="Sections">
+        {TABS.map((t) => (
+          <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
+            {t.label}
+            {t.id === 'doubts' && doubts?.length > 0 && <span className="count">{doubts.length}</span>}
+          </button>
+        ))}
+      </nav>
+
+      <div className="grid" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        {tab === 'class' && (
+          <>
+            <Overview overview={stats?.overview} subject={subject} />
+            <WeakTopics topics={stats?.topics} subject={subject} />
+            <Students rows={stats?.students} subject={subject} />
+          </>
+        )}
+        {tab === 'mistakes' && <Misconceptions rows={stats?.misconceptions} highlight={focus?.id} />}
+        {tab === 'doubts' && <Doubts doubts={doubts} onSent={refresh} />}
+        {tab === 'send' && (
+          <>
+            <Broadcast students={stats?.overview.students} onSent={refresh} />
+            <DailyPush push={push} setPush={setPush} onSent={refresh} />
+          </>
+        )}
+        {tab === 'messages' && <MessageLog messages={live?.messages} />}
       </div>
     </main>
   );
@@ -114,9 +211,9 @@ export default function App() {
 
 const Loading = () => <p className="empty">Loading...</p>;
 
-function Card({ title, wide, children }) {
+function Card({ title, wide, id, children }) {
   return (
-    <section className={`card ${wide ? 'wide' : ''}`}>
+    <section id={id} className={`card ${wide ? 'wide' : ''}`}>
       <h2>{title}</h2>
       {children}
     </section>
@@ -127,12 +224,12 @@ function Overview({ overview, subject }) {
   const tiles = overview
     ? [
         ['Students', overview.students],
-        ['Answers, last 7 days', overview.answersWeek],
-        ['First-try accuracy', pctText(overview.firstTryAccuracy), overview.firstTries ? `${overview.firstTries} first tries` : 'no answers yet'],
+        ['Answers this week', overview.answersWeek],
+        ['Right on first try', pctText(overview.firstTryAccuracy), overview.firstTries ? `this week, out of ${overview.firstTries}` : 'no answers yet'],
       ]
     : [];
   return (
-    <Card title={`Class overview · ${SUBJECT_NAMES[subject]}`} wide>
+    <Card title={`Class · ${SUBJECT_NAMES[subject]}`} wide>
       <div className="tiles">
         {tiles.map(([label, value, note]) => (
           <div key={label} className="tile">
@@ -155,14 +252,14 @@ function TopicTip({ active, payload }) {
         {t.topic} {t.name}
       </strong>
       <br />
-      {t.correct} of {t.tries} right on the first try ({t.pct}%)
+      {t.correct} of {t.tries} right on first try ({t.pct}%)
     </div>
   );
 }
 
 function WeakTopics({ topics, subject }) {
   return (
-    <Card title="Weak topics · first-try accuracy, worst first">
+    <Card title="Weakest topics · right on first try" id="weak-topics">
       {!topics ? (
         <Loading />
       ) : !topics.length ? (
@@ -193,49 +290,63 @@ function WeakTopics({ topics, subject }) {
   );
 }
 
-function Misconceptions({ rows }) {
+const SHORT_STEM = 40;
+
+// One row per question: how many got it right first time, the wrong answer
+// chosen most, and the hint students get for it. The full question shows on tap.
+function Misconceptions({ rows, highlight }) {
   return (
-    <Card title="Misconceptions · lowest first-try % first" wide>
+    <Card title="Common mistakes · hardest questions first" wide>
       {!rows ? (
         <Loading />
       ) : !rows.length ? (
         <p className="empty">No answers yet.</p>
       ) : (
         <div className="table-wrap">
-          <table className="misc">
+          <table className="misc stack">
             <thead>
               <tr>
                 <th>Question</th>
-                <th>First try</th>
-                <th>Most-chosen wrong option</th>
-                <th>Approved explanation</th>
+                <th>Right first time</th>
+                <th>Most common wrong answer</th>
+                <th>Hint students get</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <strong>
-                      Q{r.id} {r.topic}
-                    </strong>
-                    <div className="stem">{r.stem}</div>
+                <tr key={r.id} id={`mistake-${r.id}`} className={highlight === `mistake-${r.id}` ? 'flash' : ''}>
+                  <td data-label="Question">
+                    {r.stem.length > SHORT_STEM ? (
+                      <details className="stem-more">
+                        <summary>
+                          <strong>Q{r.id}</strong> {r.stem.slice(0, SHORT_STEM - 3).trimEnd()}...
+                        </summary>
+                        <p>{r.stem}</p>
+                      </details>
+                    ) : (
+                      <>
+                        <strong>Q{r.id}</strong> {r.stem}
+                      </>
+                    )}
                   </td>
-                  <td className="num">
-                    {pctText(r.pct)} <span className="muted">of {r.tries}</span>
+                  <td data-label="Right first time" className="num">
+                    {pctText(r.pct)} <span className="muted">(of {r.tries})</span>
                   </td>
-                  <td>
+                  <td data-label="Most common wrong answer">
                     {r.wrongOption ? (
                       <>
                         <strong>
                           {r.wrongOption}) {r.wrongText}
                         </strong>{' '}
-                        <span className="muted">×{r.wrongCount}</span>
+                        <span className="muted">· {plural(r.wrongCount, 'time', 'times')}</span>
                       </>
                     ) : (
-                      <span className="muted">none</span>
+                      <span className="muted">Nobody got it wrong</span>
                     )}
                   </td>
-                  <td>{r.wrongOption && (r.explanation ?? <span className="muted">No approved explanation yet</span>)}</td>
+                  <td data-label="Hint students get">
+                    {r.wrongOption && (r.explanation ?? <span className="muted">No hint yet</span>)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -259,8 +370,8 @@ function Students({ rows, subject }) {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Streak</th>
-                <th>Accuracy</th>
+                <th>Right in a row</th>
+                <th>Right on first try</th>
                 <th>Weakest topic</th>
               </tr>
             </thead>
@@ -272,7 +383,7 @@ function Students({ rows, subject }) {
                   <td className="num">
                     {pctText(s.pct)} <span className="muted">of {s.tries}</span>
                   </td>
-                  <td>{s.weakest ? `${s.weakest} ${TOPICS[subject][s.weakest]}` : <span className="muted">-</span>}</td>
+                  <td>{s.weakest ? TOPICS[subject][s.weakest] : <span className="muted">-</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -287,9 +398,9 @@ function Doubts({ doubts, onSent }) {
   const [drafts, setDrafts] = useState({});
   const setDraft = (id, text) => setDrafts((d) => ({ ...d, [id]: text }));
   return (
-    <Card title={`Doubts inbox${doubts ? ` (${doubts.length})` : ''}`} wide>
+    <Card title={`Questions from students${doubts ? ` (${doubts.length})` : ''}`} wide id="doubts">
       {!doubts && <Loading />}
-      {doubts?.length === 0 && <p className="empty">No doubts waiting. Students send ASK and their question.</p>}
+      {doubts?.length === 0 && <p className="empty">No questions waiting. Students ask by texting ASK and their question.</p>}
       <div className="doubts">
         {doubts?.map((d) => (
           <article key={d.id} className="doubt">
@@ -301,7 +412,7 @@ function Doubts({ doubts, onSent }) {
             <p className="doubt-text">{d.text}</p>
             {d.gemmaReply && (
               <p className="gemma">
-                <span className="muted">Gemma answered:</span> {d.gemmaReply}
+                <span className="muted">Answered by the computer (Gemma):</span> {d.gemmaReply}
               </p>
             )}
             <SmsBox
@@ -325,9 +436,9 @@ function Broadcast({ students, onSent }) {
   const [text, setText] = useState('');
   const [done, setDone] = useState(null);
   return (
-    <Card title="Broadcast to all students">
+    <Card title="Message all students">
       <SmsBox
-        label="Broadcast message"
+        label="Message to all students"
         placeholder="e.g. No class on Friday. Keep practising: send QUIZ."
         value={text}
         onChange={(t) => (setText(t), setDone(null))}
@@ -335,7 +446,7 @@ function Broadcast({ students, onSent }) {
         onSend={async (t) => {
           if (!window.confirm(`Send this SMS to all ${students ?? ''} students?`)) return false;
           const { queued } = await sendJson('POST', '/api/broadcast', { text: t });
-          setDone(`Queued for ${queued} students.`);
+          setDone(`Sending to ${queued} students.`);
           onSent();
         }}
       />
@@ -364,7 +475,7 @@ function DailyPush({ push, setPush, onSent }) {
     setError(null);
     try {
       const { queued, skipped } = await sendJson('POST', '/api/push/now');
-      setResult(`Queued ${queued} question(s)${skipped ? `, ${skipped} skipped (no approved question)` : ''}.`);
+      setResult(`Sending ${plural(queued, 'question', 'questions')}${skipped ? `. ${skipped} skipped (no question ready for them)` : ''}.`);
       onSent();
     } catch (e) {
       setError(e.message);
@@ -374,7 +485,7 @@ function DailyPush({ push, setPush, onSent }) {
   }
 
   return (
-    <Card title="Daily question push">
+    <Card title="Daily question for every student">
       {push && (
         <>
           <p>
@@ -384,7 +495,7 @@ function DailyPush({ push, setPush, onSent }) {
                 {push.lastPushDate && <span className="muted"> · last sent {push.lastPushDate}</span>}
               </>
             ) : (
-              <span className="muted">Not scheduled. Set DAILY_PUSH_TIME=HH:MM in .env and restart the server.</span>
+              <span className="muted">Not switched on. Set DAILY_PUSH_TIME=HH:MM in .env and restart the server.</span>
             )}
           </p>
           <label className="field">
@@ -395,7 +506,7 @@ function DailyPush({ push, setPush, onSent }) {
                 <optgroup key={subject} label={SUBJECT_NAMES[subject]}>
                   {Object.entries(topics).map(([code, name]) => (
                     <option key={code} value={code}>
-                      {code} {name}
+                      {name}
                     </option>
                   ))}
                 </optgroup>
@@ -403,7 +514,7 @@ function DailyPush({ push, setPush, onSent }) {
             </select>
           </label>
           <button className="primary" onClick={sendNow} disabled={busy}>
-            {busy ? 'Sending...' : 'Send now'}
+            {busy ? 'Sending...' : 'Send one question to everyone now'}
           </button>
         </>
       )}
@@ -415,7 +526,7 @@ function DailyPush({ push, setPush, onSent }) {
 
 function MessageLog({ messages }) {
   return (
-    <Card title="Live message log · last 20" wide>
+    <Card title="Latest messages" wide>
       {!messages ? (
         <Loading />
       ) : !messages.length ? (
@@ -428,7 +539,7 @@ function MessageLog({ messages }) {
                 <tr key={m.id} className={m.direction}>
                   <td className="muted nowrap">{clock(m.created_at)}</td>
                   <td className="nowrap">
-                    <span className={`dir ${m.direction}`}>{m.direction === 'in' ? 'IN' : 'OUT'}</span>
+                    <span className={`dir ${m.direction}`}>{m.direction === 'in' ? 'From student' : 'To student'}</span>
                   </td>
                   <td className="nowrap">
                     {m.name ?? 'Unknown'} <span className="muted">{m.masked}</span>
