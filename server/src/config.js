@@ -7,7 +7,8 @@ dotenv.config({ path: path.join(ROOT, '.env'), quiet: true });
 
 // GEMINI_API_KEY is read only by the teacher photo-import code; never log it.
 export const config = {
-  port: Number(process.env.PORT) || 3000,
+  // PORT=0 lets the OS pick a free port (tests); unset or empty means 3000.
+  port: process.env.PORT?.trim() ? Number(process.env.PORT) : 3000,
   dbPath: path.resolve(ROOT, process.env.DB_PATH || 'server/data/abhyaas.db'),
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:e4b',
   geminiModel: process.env.GEMINI_MODEL || '',
