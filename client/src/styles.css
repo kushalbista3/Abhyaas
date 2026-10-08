@@ -24,6 +24,10 @@ h1 { margin-bottom: 0; }
 .sim-bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: center; font-size: 22px; }
 .sim-bar select, .sim-number { font-size: 22px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--fg); }
 .sim-number { width: 9em; }
+.gateway { font-size: 18px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); }
+.gateway::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: currentColor; }
+.gateway.on { color: #1e6b3f; background: #e3f2e8; }
+.gateway.off { color: var(--muted); background: var(--card); }
 .handset { width: min(600px, 100%); box-sizing: border-box; background: #232a26; border-radius: 40px; padding: 22px 18px 26px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
 .screen { background: #e8eee5; border-radius: 12px; height: 60vh; min-height: 360px; display: flex; flex-direction: column; overflow: hidden; }
 .screen-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; background: #2f6f4f; color: #fff; padding: 10px 16px; font-size: 28px; font-weight: 700; }

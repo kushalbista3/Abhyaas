@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { openDb } from './db.js';
+import { lanAddresses, startupBanner } from './lan.js';
 
 const db = openDb(config.dbPath);
 const app = createApp(db);
@@ -18,5 +19,7 @@ const server = app.listen(config.port, '0.0.0.0', (err) => {
     db.close();
     process.exit(1);
   }
-  console.log(`Abhyaas server on http://0.0.0.0:${server.address().port}`);
+  const { port } = server.address();
+  console.log(`Abhyaas server on http://0.0.0.0:${port}`);
+  for (const line of startupBanner(port, lanAddresses())) console.log(line);
 });

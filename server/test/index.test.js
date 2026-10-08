@@ -48,6 +48,7 @@ test('the server keeps running after startup and answers /api/health', async () 
     assert.ok(port, `no startup banner. stdout: ${s.out()} stderr: ${s.err()}`);
     await sleep(500);
     assert.equal(s.child.exitCode, null, 'process exited after startup');
+    assert.match(s.out(), new RegExp(`LAPTOP_URL=http://[\\d.]+:${port} node gateway\\.mjs|No LAN address`));
     const res = await fetch(`http://127.0.0.1:${port}/api/health`);
     assert.equal(res.status, 200);
     assert.equal((await res.json()).ok, true);

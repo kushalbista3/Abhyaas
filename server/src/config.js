@@ -11,6 +11,7 @@ export const config = {
   port: process.env.PORT?.trim() ? Number(process.env.PORT) : 3001,
   dbPath: path.resolve(ROOT, process.env.DB_PATH || 'server/data/abhyaas.db'),
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:e4b',
+  ollamaHost: (process.env.OLLAMA_HOST || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
   geminiModel: process.env.GEMINI_MODEL || '',
   dailyPushTime: process.env.DAILY_PUSH_TIME || '',
 };

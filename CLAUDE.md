@@ -38,7 +38,8 @@ server/src/gsm7.js               gsmLength(), fitsOneSms(), smsSafe(), firstFitt
 server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone(), normalizePhone()
 server/src/engine.js             createSmsEngine(db) -> handleIncomingSms(phone, body), pushQuestion(); commands, grading, logging
 server/src/practice.js           adaptive QUIZ order, weakest topic, due reviews, streaks, daily cap
-server/src/app.js                createApp(db): Express routes (POST /api/sms/incoming, /api/sim/* for the simulator)
+server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*
+server/src/lan.js                lanAddresses(), startupBanner(): LAN IPs + the LAPTOP_URL command printed on startup
 server/src/expr.js               safe expression evaluator (no eval) for value comparison
 server/src/validate-question.js  validateQuestion(), the ONLY gate for questions
 server/src/seed-data.js          14 maths + 8 science original MCQs (2 per topic) + 3 fake demo students
@@ -46,6 +47,7 @@ server/src/review.js             teacher review CLI (list, approve, edit)
 server/src/seed.js, demo-reset.js
 server/data/                     abhyaas.db, *.local.json (all gitignored)
 client/src/                      React app: App.jsx dashboard, Phone.jsx SMS simulator at /phone
+gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in .last-id, .pending.json (gitignored)
 ```
 
 ## Data model
@@ -75,6 +77,14 @@ client/src/                      React app: App.jsx dashboard, Phone.jsx SMS sim
 - QUIZ order per subject: due review in weakest topic, any due review (first try wrong >= 2 days ago), new in weakest topic, next new, then least recently practised. Weakest = lowest first-try accuracy with >= 2 tries, never 100%.
 - Daily cap: 20 QUIZ-served questions per local day (`origin = 'quiz'`); pushes don't count.
 - Every reply goes through `smsSafe()` and is logged to `messages` and `outbox`. Tests pass a fake clock: `createSmsEngine(db, { now })`.
+
+## SMS gateway
+
+- `gateway-phone/gateway.mjs` polls `termux-sms-list`, POSTs `{phone, body, smsId}` to `/api/sms/incoming`, and sends the reply with `termux-sms-send`. The server caches replies by `phone|smsId`, so a retried POST is never graded twice. A failed reply send is resent by the gateway from `.pending.json`, never re-posted.
+- Pushes: `GET /api/gateway/outbox` (queued), then `POST /api/gateway/outbox/:id/sent|failed`. The gateway marks an id `sending` on disk before sending and never sends it again.
+- `POST /api/gateway/heartbeat` every 30s. `/api/health` gateway mode is `termux` within 90s of one, else `simulator`.
+- Gateway logs mask phones and never print SMS text (an execFile error message contains the full command line, so don't log it).
+- Tests run the real gateway against fake `termux-sms-*` scripts on PATH (`server/test/gateway.test.js`).
 
 ## Conventions
 

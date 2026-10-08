@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 
 // A keypad-phone SMS thread for the projector. Messages go through the same
 // POST /api/sms/incoming the SMS gateway uses; the thread polls every 3s so
-// pushed questions show up too.
+// pushed questions show up too. /api/health says whether the Android gateway
+// phone is sending heartbeats.
 const LETTERS = ['A', 'B', 'C', 'D'];
 const COMMANDS = ['QUIZ', 'TOPICS', 'SUBJECT', 'ASK', 'SCORE', 'HELP'];
 const NEW = 'new';
 const POLL_MS = 3000;
+const HEALTH_MS = 5000;
 
 // SQLite UTC "YYYY-MM-DD HH:MM:SS" -> local "HH:MM"
 const clock = (ts) =>
@@ -21,6 +23,7 @@ export default function Phone() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [tick, setTick] = useState(0);
+  const [gateway, setGateway] = useState(null);
   const inputRef = useRef(null);
   const endRef = useRef(null);
 
@@ -40,6 +43,21 @@ export default function Phone() {
 
   useEffect(() => {
     loadStudents();
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      fetch('/api/health')
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((h) => live && setGateway(h.gateway))
+        .catch(() => live && setGateway(null));
+    load();
+    const id = setInterval(load, HEALTH_MS);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
@@ -118,6 +136,9 @@ export default function Phone() {
             onChange={(e) => setNewNumber(e.target.value)}
           />
         )}
+        <span className={`gateway ${gateway?.mode === 'termux' ? 'on' : 'off'}`}>
+          Phone gateway: {gateway?.mode === 'termux' ? 'connected' : 'not connected'}
+        </span>
         <a href="/">Dashboard</a>
       </div>
       {error && <p className="error">Server: {error}</p>}

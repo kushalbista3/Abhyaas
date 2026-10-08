@@ -5,3 +5,8 @@
 node_modules/
 dist/
 .DS_Store
+
+# Gateway phone state
+gateway-phone/.last-id
+gateway-phone/.pending.json
+gateway-phone/*.tmp

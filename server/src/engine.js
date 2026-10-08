@@ -241,19 +241,21 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
   function send(phone, body, status, t) {
     if (!fitsOneSms(body)) throw new Error('reply does not fit one SMS');
     const studentId = q.studentByPhone.get(phone)?.id ?? null;
-    db.transaction(() => {
+    return db.transaction(() => {
       q.logMessage.run(studentId, phone, 'out', body, sqlTime(t));
-      q.queue.run(phone, body, status, sqlTime(t), status === 'sent' ? sqlTime(t) : null);
+      return Number(q.queue.run(phone, body, status, sqlTime(t), status === 'sent' ? sqlTime(t) : null).lastInsertRowid);
     })();
   }
 
   const report = (phone, err) => console.error(`SMS ${maskPhone(phone)}: ${err.message}`);
 
-  async function handleIncomingSms(rawPhone, rawBody) {
+  // One incoming SMS -> { reply, outboxId }. outboxId is the reply's outbox
+  // row (null if logging it failed), so the gateway can report delivery.
+  async function receive(rawPhone, rawBody) {
     const t = now();
     const phone = normalizePhone(rawPhone);
     const body = String(rawBody ?? '');
-    if (!phone) return REPLIES.error;
+    if (!phone) return { reply: REPLIES.error, outboxId: null };
     try {
       q.logMessage.run(q.studentByPhone.get(phone)?.id ?? null, phone, 'in', body, sqlTime(t));
     } catch (err) {
@@ -267,13 +269,16 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
       reply = REPLIES.error;
     }
     reply = smsSafe(reply);
+    let outboxId = null;
     try {
-      send(phone, reply, 'sent', t);
+      outboxId = send(phone, reply, 'sent', t);
     } catch (err) {
       report(phone, err);
     }
-    return reply;
+    return { reply, outboxId };
   }
+
+  const handleIncomingSms = async (phone, body) => (await receive(phone, body)).reply;
 
   // A question the server sends unasked (e.g. a daily push). It is queued in
   // the outbox and does not count toward the daily QUIZ cap.
@@ -288,5 +293,5 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     return body;
   }
 
-  return { handleIncomingSms, pushQuestion };
+  return { receive, handleIncomingSms, pushQuestion };
 }
