@@ -26,7 +26,7 @@ SEE (Nepal Grade 10) maths and science MCQ practice over SMS for students on key
 | `npm run dev` | server (`node --watch`) + client (`vite --host`) via concurrently |
 | `npm test` | server tests (`node:test`, files in `server/test/`) |
 | `npm run seed` | validate and insert the seed questions and demo students, then apply the committed snapshots (idempotent) |
-| `npm run demo:reset` | delete the local DB and reseed (teacher approvals come back from the snapshots) |
+| `npm run demo:reset` | delete the local DB, reseed (teacher approvals come back from the snapshots), then 5 days of demo practice + 2 open doubts |
 | `npm run questions:review` | `list [--all]`, `approve <ids>`, `edit <id> [field=value ...]` (no fields opens `$EDITOR`); writes `reviews.json` |
 | `npm run explain:generate` | local Gemma drafts explanations for wrong options of approved questions (`--redo` replaces drafts) |
 | `npm run explain:review` | `list`, `approve <ids>`, `reject <ids>`, `edit <id or 11B> "<text>"`; writes `explanations.json` |
@@ -40,7 +40,11 @@ server/src/gsm7.js               gsmLength(), fitsOneSms(), smsSafe(), firstFitt
 server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone(), normalizePhone()
 server/src/engine.js             createSmsEngine(db, {now, llm}) -> handleIncomingSms(phone, body), pushQuestion(); commands, grading, logging
 server/src/practice.js           adaptive QUIZ order, weakest topic, due reviews, streaks, daily cap
-server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*
+server/src/stats.js              dashboard queries per subject: overview, topic accuracy, misconceptions, students
+server/src/teacher.js            doubts inbox, replyToDoubt(), broadcast(): all via engine.queueSms()
+server/src/daily-push.js         createDailyPush(): DAILY_PUSH_TIME scheduler, topic override, sendNow()
+server/src/demo-activity.js      seedDemoActivity(): 5 days of demo SMS through the real engine (demo:reset only)
+server/src/app.js                createApp(db, engine, {now, ollamaHost, ollamaModel, push}): /api/sms/incoming, /api/gateway/*, /api/health, /api/sim/*, dashboard routes
 server/src/lan.js                lanAddresses(), startupBanner(): LAN IPs + the LAPTOP_URL command printed on startup
 server/src/expr.js               safe expression evaluator (no eval) for value comparison
 server/src/validate-question.js  validateQuestion(), the ONLY gate for questions
@@ -55,13 +59,13 @@ server/src/explain-review.js     teacher explanation review CLI (list, approve, 
 server/scripts/generateExplanations.js  model drafts for wrong options (3 tries each, validated)
 server/src/seed.js, demo-reset.js
 server/data/                     abhyaas.db, *.local.json (gitignored); reviews.json, explanations.json (committed, seed questions only)
-client/src/                      React app: App.jsx dashboard, Phone.jsx SMS simulator at /phone
+client/src/                      React app: App.jsx dashboard at /, SmsBox.jsx (live GSM-7 counter, imports server/src/gsm7.js), Phone.jsx SMS simulator at /phone
 gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in .last-id, .pending.json (gitignored)
 ```
 
 ## Data model
 
-`students` (+ current_subject MATH|SCI, default MATH), `questions` (subject `MATH`|`SCI`, status `needs-review`|`approved`, topic, stem, option_a-d, correct_option, solution, misconceptions JSON keyed by wrong letter, source `seed`|`photo-import`, source_ref), `explanations` (status `draft`|`approved`, model `gemma`|`teacher`), `sessions` (one per served question; origin `quiz`|`push`), `attempts` (first attempt per session = the "first try" used for stats), `messages`, `outbox` (`queued`|`sent`|`failed`), `doubts` (`open`|`answered`, subject). Enums, and which topics belong to which subject, are enforced with CHECK constraints. `openDb()` migrates older DBs in place.
+`students` (+ current_subject MATH|SCI, default MATH), `questions` (subject `MATH`|`SCI`, status `needs-review`|`approved`, topic, stem, option_a-d, correct_option, solution, misconceptions JSON keyed by wrong letter, source `seed`|`photo-import`, source_ref), `explanations` (status `draft`|`approved`, model `gemma`|`teacher`), `sessions` (one per served question; origin `quiz`|`push`), `attempts` (first attempt per session = the "first try" used for stats), `messages`, `outbox` (`queued`|`sent`|`failed`), `doubts` (`open`|`answered`, subject; `reply` = Gemma's answer, `teacher_reply` = the teacher's), `settings` (key/value: `push_topic`, `last_daily_push`). Enums, and which topics belong to which subject, are enforced with CHECK constraints. `openDb()` migrates older DBs in place.
 
 ## Questions
 
@@ -78,7 +82,7 @@ gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in
 - Each subject's TOPICS message must fit one SMS.
 - New questions start as `needs-review`. Only approved questions go to students.
 - Approvals and edits of seed questions are also written to `server/data/reviews.json`, and approved explanations to `explanations.json`, so `demo:reset` keeps them. Commit those files after a review.
-- Explanations (<=120 chars, shown as "Not quite. <text> Try again: reply A/B/C/D") must pass `validateExplanation()`: GSM-7, no correct letter or value, no "add X to Y" instructions, maths numbers from the question only (a teacher's edit only warns on this), no new science terms.
+- Explanations (<=120 chars, shown as "Not quite. <text> Try again: reply A/B/C/D") must pass `validateExplanation()`: GSM-7, no correct letter or value, no "add X to Y" instructions, maths numbers from the question only, no new science terms. A teacher's edit only warns on those two checks; Gemma drafts must pass all of them.
 - New seed questions must be original. Each wrong option must be a real student mistake, described in its misconception note. Keep the correct letters spread across A-D.
 
 ## SMS engine
@@ -90,6 +94,13 @@ gateway-phone/gateway.mjs        Android SMS gateway (Termux, no deps); state in
 - QUIZ order per subject: due review in weakest topic, any due review (first try wrong >= 2 days ago), new in weakest topic, next new, then least recently practised. Weakest = lowest first-try accuracy with >= 2 tries, never 100%.
 - Daily cap: 20 QUIZ-served questions per local day (`origin = 'quiz'`); pushes don't count.
 - Every reply goes through `smsSafe()` and is logged to `messages` and `outbox`. Tests pass a fake clock and a fake model: `createSmsEngine(db, { now, llm: { chat: async () => '...' } })`. Never call the real model in tests.
+
+## Teacher dashboard
+
+- `/` (App.jsx), plain CSS, projector sizes, Maths/Science switch. Stats are first tries only (`stats.js`); student rows carry names, never phones; the message log masks phones.
+- Doubts inbox: open doubts plus Gemma-answered ones from the last 7 days without a teacher reply. A reply is queued in the outbox and sets `status = 'answered'`, `teacher_reply`.
+- Doubt replies and broadcasts go through `engine.queueSms()`: look-alikes swapped, but text that is empty, not GSM-7 or over 160 is refused (400), never cut.
+- Daily push: once per local day at or after `DAILY_PUSH_TIME` (late start still pushes that day), one `pushQuestion()` per student from their weakest topic in their current subject, or the teacher's topic override. "Send now" runs the same push and doesn't change the schedule.
 
 ## SMS gateway
 

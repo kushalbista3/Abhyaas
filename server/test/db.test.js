@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 import { openDb } from '../src/db.js';
 import { seed } from '../src/seed.js';
 
-const TABLES = ['students', 'questions', 'explanations', 'attempts', 'sessions', 'messages', 'outbox', 'doubts'];
+const TABLES = ['students', 'questions', 'explanations', 'attempts', 'sessions', 'messages', 'outbox', 'doubts', 'settings'];
 
 test('schema creates all tables', () => {
   const db = openDb(':memory:');
@@ -107,7 +107,7 @@ test('openDb migrates a DB made before science existed', () => {
       [{ id: 1, subject: 'MATH', status: 'approved' }, { id: 2, subject: 'MATH', status: 'needs-review' }],
     );
     assert.equal(db.prepare('SELECT current_subject FROM students').get().current_subject, 'MATH');
-    assert.equal(db.prepare('SELECT subject FROM doubts').get().subject, 'MATH');
+    assert.deepEqual(db.prepare('SELECT subject, teacher_reply FROM doubts').get(), { subject: 'MATH', teacher_reply: null });
     assert.equal(db.prepare('SELECT question_id FROM attempts').get().question_id, 1);
     assert.deepEqual(db.prepare('SELECT state, origin FROM sessions').get(), { state: 'active', origin: 'quiz' });
     assert.throws(() => db.prepare("UPDATE sessions SET origin = 'cron'").run());

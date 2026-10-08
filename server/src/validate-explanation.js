@@ -95,7 +95,8 @@ export function newScienceTerms(text, question, letter) {
 }
 
 // mode 'generate' (model drafts, approve): everything must pass.
-// mode 'teacher' (a teacher's own text): the maths number check only warns.
+// mode 'teacher' (a teacher's own text): the maths number check and the
+// science-term check only warn; the teacher is the one checking the facts.
 export function validateExplanation(text, question, letter, { mode = 'generate' } = {}) {
   const errors = [];
   const warnings = [];
@@ -124,7 +125,10 @@ export function validateExplanation(text, question, letter, { mode = 'generate' 
     }
   } else {
     const terms = newScienceTerms(t, question, letter);
-    if (terms.length) errors.push(`science terms not in the question, options, solution or note: ${terms.join(', ')}`);
+    if (terms.length) {
+      const msg = `science terms not in the question, options, solution or note: ${terms.join(', ')}`;
+      (mode === 'teacher' ? warnings : errors).push(msg);
+    }
   }
   return { ok: errors.length === 0, errors, warnings, length };
 }

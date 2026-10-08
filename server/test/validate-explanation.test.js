@@ -85,13 +85,15 @@ test('maths numbers must come from the stem, options or solution (teacher: warni
   assert.equal(bad.ok, false, 'other checks still bind a teacher');
 });
 
-test('science: no key terms beyond the question, options, solution and note', () => {
+test('science: no key terms beyond the question, options, solution and note (teacher: warning only)', () => {
   assert.deepEqual(newScienceTerms('Inertia is what changes.', MASS, 'A'), ['Inertia']);
   assert.deepEqual(newScienceTerms('You mixed up mass and weight.', MASS, 'A'), []);
   assert.deepEqual(newScienceTerms('Check your thinking again carefully.', MASS, 'A'), [], 'common words are fine');
   assert.deepEqual(newScienceTerms('It forms ZnSO4.', GAS, 'B'), ['ZnSO4'], 'formulas must be in the question');
   assert.match(errorsOf('Inertia is what changes.', MASS, 'A'), /science terms.*Inertia/);
-  assert.match(errorsOf('Inertia is what changes.', MASS, 'A', { mode: 'teacher' }), /science terms/);
+  const r = validateExplanation('Inertia is what changes.', MASS, 'A', { mode: 'teacher' });
+  assert.equal(r.ok, true);
+  assert.match(r.warnings.join(), /science terms.*Inertia/);
 });
 
 test('only wrong options get explanations', () => {

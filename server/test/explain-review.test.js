@@ -138,6 +138,28 @@ test('approve (checks must pass), reject, and edit by id or 11B', () => {
   );
 });
 
+test('science: a new term blocks a Gemma draft but only warns on a teacher edit', () => {
+  const db = seeded();
+  const phy = db.prepare("SELECT * FROM questions WHERE source_ref = 'seed:PHY-1'").get();
+  const wrong = ['A', 'B', 'C', 'D'].find((l) => l !== phy.correct_option);
+  const text = 'Think about inertia here.';
+  const draft = db.prepare("INSERT INTO explanations (question_id, option, text, status, model) VALUES (?, ?, ?, 'draft', 'gemma')")
+    .run(phy.id, wrong, text).lastInsertRowid;
+
+  const [res] = approveExplanations(db, [draft]);
+  assert.equal(res.ok, false);
+  assert.match(res.errors.join(), /science terms.*inertia/);
+
+  const edit = editExplanation(db, `${phy.id}${wrong}`, text);
+  assert.equal(edit.ok, true);
+  assert.deepEqual(edit.warnings.length, 1);
+  assert.match(edit.warnings[0], /science terms.*inertia/);
+  assert.deepEqual(
+    db.prepare('SELECT text, status, model FROM explanations WHERE question_id = ? AND option = ?').all(phy.id, wrong),
+    [{ text, status: 'approved', model: 'teacher' }],
+  );
+});
+
 test('CLI: approved explanations go to explanations.json and survive demo:reset', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'abhyaas-explain-'));
   const env = { ...process.env, DB_PATH: path.join(dir, 'test.db'), SNAPSHOT_DIR: dir };

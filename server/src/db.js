@@ -91,7 +91,13 @@ CREATE TABLE IF NOT EXISTS doubts (
   text        TEXT NOT NULL,
   status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','answered')),
   reply       TEXT,
+  teacher_reply TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_attempts_student ON attempts(student_id);
@@ -139,6 +145,10 @@ function migrate(db) {
   const dCols = columns(db, 'doubts');
   if (dCols.length && !dCols.includes('subject')) {
     db.exec("ALTER TABLE doubts ADD COLUMN subject TEXT NOT NULL DEFAULT 'MATH' CHECK (subject IN ('MATH','SCI'))");
+  }
+  // reply is Gemma's answer; teacher_reply the teacher's, sent from the dashboard.
+  if (dCols.length && !columns(db, 'doubts').includes('teacher_reply')) {
+    db.exec('ALTER TABLE doubts ADD COLUMN teacher_reply TEXT');
   }
   // origin: a QUIZ request ('quiz') or a scheduled push; only QUIZ counts toward the daily cap.
   const sesCols = columns(db, 'sessions');

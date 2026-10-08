@@ -4,7 +4,7 @@
 // The local model (llm) only maps free-text replies to a letter and answers
 // maths concept questions. Its calls run between DB transactions, since a
 // better-sqlite3 transaction can't await.
-import { SMS_LIMIT, firstFitting, fitsOneSms, gsmLength, smsSafe } from './gsm7.js';
+import { SMS_LIMIT, firstFitting, fitsOneSms, gsmLength, smsSafe, unsafeChars } from './gsm7.js';
 import { askModel, computeReply, isComputeRequest, isScienceQuestion, topicOf } from './llm/ask.js';
 import { localLetter, modelLetter } from './llm/parse-reply.js';
 import {
@@ -44,6 +44,9 @@ export const REPLIES = {
   unknownSubject: 'Unknown subject. Send SUBJECT MATH or SUBJECT SCI.',
   unknown: 'Sorry, I did not understand. Send HELP for commands.',
 };
+
+// A teacher's text that can't go out as one GSM-7 SMS (shown back as a 400).
+export class SmsTextError extends Error {}
 
 export const helpMessage = (subject) => `Abhyaas ${SUBJECT_NAMES[subject]}: ${HELP_BODY}`;
 
@@ -326,17 +329,33 @@ export function createSmsEngine(db, { now = () => new Date(), llm = null } = {})
   const handleIncomingSms = async (phone, body) => (await receive(phone, body)).reply;
 
   // A question the server sends unasked (e.g. a daily push). It is queued in
-  // the outbox and does not count toward the daily QUIZ cap.
-  function pushQuestion(studentId) {
+  // the outbox and does not count toward the daily QUIZ cap. With a topic the
+  // question comes from that topic (and its subject); otherwise the student's
+  // subject in the usual QUIZ order. null if there is no approved question.
+  function pushQuestion(studentId, { topic = null } = {}) {
     const t = now();
     const student = q.studentById.get(studentId);
     if (!student) return null;
-    const question = db.transaction(() => serve(student, student.current_subject, { origin: 'push', t }))();
+    const subject = topic ? TOPIC_SUBJECT[topic] : student.current_subject;
+    if (!subject) throw new Error(`unknown topic ${topic}`);
+    const question = db.transaction(() => serve(student, subject, { topic, origin: 'push', t }))();
     if (!question) return null;
     const body = smsSafe(formatQuestionSms(question));
     send(student.phone, body, 'queued', t);
     return body;
   }
 
-  return { receive, handleIncomingSms, pushQuestion };
+  // A teacher's own SMS (doubt reply, broadcast), queued for the gateway.
+  // Look-alikes (smart quotes) are swapped, but it is never cut or stripped:
+  // text that is empty, not GSM-7 or over 160 throws, so the teacher can fix it.
+  function queueSms(phone, text) {
+    const bad = unsafeChars(text);
+    if (bad.length) throw new SmsTextError(`has characters an SMS can't send: ${bad.join(' ')}`);
+    const body = smsSafe(text, Infinity);
+    if (!body) throw new SmsTextError('message is empty');
+    if (!fitsOneSms(body)) throw new SmsTextError(`message is ${gsmLength(body)} chars, max ${SMS_LIMIT}`);
+    return send(phone, body, 'queued', now());
+  }
+
+  return { receive, handleIncomingSms, pushQuestion, queueSms };
 }

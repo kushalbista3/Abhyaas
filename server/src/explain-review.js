@@ -81,7 +81,7 @@ export function resolveRef(db, ref) {
 }
 
 // A teacher's text, saved as approved (model 'teacher'). The maths number
-// check only warns; every other check must pass.
+// and science-term checks only warn; every other check must pass.
 export function editExplanation(db, ref, text) {
   const target = resolveRef(db, ref);
   if (!target) return { ok: false, errors: [`no explanation or question option "${ref}"`], warnings: [] };

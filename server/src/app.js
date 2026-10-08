@@ -1,13 +1,17 @@
 import express from 'express';
 import { config } from './config.js';
-import { createSmsEngine } from './engine.js';
+import { createDailyPush } from './daily-push.js';
+import { SmsTextError, createSmsEngine } from './engine.js';
 import { sqlTime } from './practice.js';
-import { formatQuestionSms, maskPhone, normalizePhone } from './sms.js';
+import { SUBJECTS, formatQuestionSms, maskPhone, normalizePhone } from './sms.js';
+import { dashboard } from './stats.js';
+import { TeacherError, broadcast, listDoubts, replyToDoubt } from './teacher.js';
 
 // The phone gateway counts as connected if a heartbeat (every 30s) arrived this recently.
 export const GATEWAY_FRESH_MS = 90_000;
 const OLLAMA_PROBE_MS = 1500;
 const SEEN_SMS_MAX = 1000;
+const MESSAGE_LOG_LIMIT = 20;
 
 // Is Ollama up, and is the configured model pulled? A probe, not an LLM call.
 async function probeOllama(host, model) {
@@ -25,7 +29,12 @@ async function probeOllama(host, model) {
 export function createApp(
   db,
   engine = createSmsEngine(db),
-  { now = Date.now, ollamaHost = config.ollamaHost, ollamaModel = config.ollamaModel } = {},
+  {
+    now = Date.now,
+    ollamaHost = config.ollamaHost,
+    ollamaModel = config.ollamaModel,
+    push = createDailyPush(db, engine, { now: () => new Date(now()), time: config.dailyPushTime }),
+  } = {},
 ) {
   const app = express();
   app.use(express.json());
@@ -43,6 +52,25 @@ export function createApp(
     failed: db.prepare("UPDATE outbox SET status = 'failed' WHERE id = ?"),
   };
 
+  function gatewayStatus() {
+    const ago = gatewaySeenAt === null ? null : Math.max(0, now() - gatewaySeenAt);
+    return {
+      mode: ago !== null && ago <= GATEWAY_FRESH_MS ? 'termux' : 'simulator',
+      secondsSinceLastSeen: ago === null ? null : Math.round(ago / 1000),
+    };
+  }
+
+  // Teacher text that can't be sent (too long, not GSM-7) -> 400; doubt not found -> 404.
+  function teacherAction(res, fn) {
+    try {
+      res.json(fn());
+    } catch (err) {
+      if (err instanceof SmsTextError) return res.status(400).json({ error: err.message });
+      if (err instanceof TeacherError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  }
+
   app.get('/api/health', async (req, res) => {
     let questions = null;
     try {
@@ -50,16 +78,12 @@ export function createApp(
     } catch (err) {
       console.error(`Health: database error: ${err.message}`);
     }
-    const ago = gatewaySeenAt === null ? null : Math.max(0, now() - gatewaySeenAt);
     res.json({
       ok: questions !== null,
       db: questions !== null ? 'ok' : 'error',
       questions,
       ollama: await probeOllama(ollamaHost, ollamaModel),
-      gateway: {
-        mode: ago !== null && ago <= GATEWAY_FRESH_MS ? 'termux' : 'simulator',
-        secondsSinceLastSeen: ago === null ? null : Math.round(ago / 1000),
-      },
+      gateway: gatewayStatus(),
     });
   });
 
@@ -105,6 +129,55 @@ export function createApp(
       res.json({ ok: true });
     });
   }
+
+  // Teacher dashboard. Student names only; phone numbers are never returned
+  // except masked in the message log.
+  app.get('/api/dashboard', (req, res) => {
+    const subject = String(req.query.subject ?? 'MATH').toUpperCase();
+    if (!SUBJECTS.includes(subject)) return res.status(400).json({ error: 'subject must be MATH or SCI' });
+    res.json(dashboard(db, subject, new Date(now())));
+  });
+
+  app.get('/api/doubts', (req, res) => {
+    res.json(listDoubts(db, new Date(now())));
+  });
+
+  app.post('/api/doubts/:id/reply', (req, res) => {
+    teacherAction(res, () => replyToDoubt(db, engine, Number(req.params.id), String(req.body?.text ?? '')));
+  });
+
+  app.post('/api/broadcast', (req, res) => {
+    teacherAction(res, () => broadcast(db, engine, String(req.body?.text ?? '')));
+  });
+
+  app.get('/api/push', (req, res) => {
+    res.json(push.status());
+  });
+
+  app.put('/api/push', (req, res) => {
+    try {
+      res.json(push.setTopic(req.body?.topic ?? null));
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/push/now', (req, res) => {
+    res.json(push.sendNow());
+  });
+
+  // The live log: last 20 messages, newest first, phones masked. Gateway
+  // status rides along so the dashboard can poll one cheap endpoint.
+  app.get('/api/messages', (req, res) => {
+    const rows = db
+      .prepare(`SELECT m.id, m.direction, m.phone, s.name, m.body, m.created_at
+        FROM messages m LEFT JOIN students s ON s.id = m.student_id ORDER BY m.id DESC LIMIT ?`)
+      .all(MESSAGE_LOG_LIMIT);
+    res.json({
+      messages: rows.map(({ phone, ...m }) => ({ ...m, masked: maskPhone(phone) })),
+      gateway: gatewayStatus(),
+    });
+  });
 
   // Simulator only. The UI shows name + masked number; phone is the value it posts.
   app.get('/api/sim/students', (req, res) => {
