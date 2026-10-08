@@ -14,7 +14,7 @@ export const METHOD_HINTS = {
   HCF: 'HCF/LCM: factorise each expression fully. HCF takes common factors with lowest powers, LCM all factors with highest powers.',
   PCT: 'Profit/VAT: take the discount off the marked price first, then add VAT on that price. Profit % is always on the cost price.',
   INT: 'Interest: write P, T and R first. SI=P*T*R/100. Compound amount=P(1+R/100)^T. Depreciation uses (1-R/100)^T.',
-  ALG: 'Algebra: bring every term to one side, factorise, then set each factor to 0. For indices, add powers when you multiply.',
+  ALG: 'Algebra: get x on one side: undo + or - first, then * or /. For x^2, factorise and set each factor to 0.',
   GEO: 'Area/Volume: draw the shape, write its formula, then put in the values with units. Check radius vs diameter.',
   SET: 'Sets: draw a Venn diagram and fill the middle first. n(AuB)=n(A)+n(B)-n(AnB). Neither=total-n(AuB).',
   PROB: 'Probability: list all outcomes first. P=favourable/total. Without replacement the total goes down by 1.',
