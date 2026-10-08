@@ -70,7 +70,7 @@ client/src/                      React app: App.jsx dashboard, Phone.jsx SMS sim
 
 ## SMS engine
 
-- Commands: JOIN <name>, HELP, SUBJECT [MATH|SCI], TOPICS, QUIZ [MATH|SCI|<code>], a bare topic code, A-D, SCORE, ASK <text>. Unknown numbers only get the JOIN prompt.
+- Commands: JOIN <name>, HELP, SUBJECT [MATH|SCI], TOPICS, QUIZ [MATH|SCI|<code>], a bare topic code, a bare subject word (MATH/MATHS/GANIT, SCI/SCIENCE/BIGYAN/VIGYAN), A-D, SCORE (both subjects), ASK <text>. Unknown numbers only get the JOIN prompt.
 - Wrong first try: the approved explanation for that option, else a generic hint. Never the solution. Wrong second try: answer + solution, session ends.
 - QUIZ order per subject: due review in weakest topic, any due review (first try wrong >= 2 days ago), new in weakest topic, next new, then least recently practised. Weakest = lowest first-try accuracy with >= 2 tries, never 100%.
 - Daily cap: 20 QUIZ-served questions per local day (`origin = 'quiz'`); pushes don't count.

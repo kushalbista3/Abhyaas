@@ -84,7 +84,7 @@ test('grading is by code: correct letter, case and punctuation tolerated', async
   const { db, send, studentId } = setup();
   const id = addQ(db, { correct: 'C' });
   await send('JOIN Sita');
-  assert.equal(await send('C'), REPLIES.noPending);
+  assert.equal(await send('C'), 'No question waiting. Send QUIZ for a new one.');
   assert.equal(servedId(await send('QUIZ')), id);
   assert.match(await send(' c) '), /^Correct! Maths streak: 1\./);
   assert.deepEqual(db.prepare('SELECT chosen_option, is_correct FROM attempts').all(), [{ chosen_option: 'C', is_correct: 1 }]);
@@ -147,7 +147,7 @@ test('second wrong answer reveals the answer with the solution and moves on', as
   pose(db, sid, 1);
   await send(wrongLetter(db, 1));
   assert.match(await send(rightLetter(db, 1)), /^Correct on your 2nd try!/);
-  assert.match(await send('SCORE'), /Streak 0\./);
+  assert.match(await send('SCORE'), /^Maths: \d+\/\d+ \(\d+%\) streak 0\./);
 });
 
 test('subjects: SUBJECT, TOPICS, QUIZ <subject>, QUIZ <code>, per-subject SCORE and streak', async () => {
@@ -180,7 +180,68 @@ test('subjects: SUBJECT, TOPICS, QUIZ <subject>, QUIZ <code>, per-subject SCORE 
   assert.equal(question(db, servedId(reply)).topic, 'PCT');
   assert.match(await send(rightLetter(db, servedId(reply))), /Maths streak: 1\./);
 
-  assert.match(await send('SCORE'), /^Maths: 1\/2 right first try \(50%\)\. Streak 1\..* Science: 2\/2 \(100%\), streak 2\.$/);
+  assert.equal(await send('SCORE'), 'Maths: 1/2 (50%) streak 1. Science: 2/2 (100%) streak 2. Today 4/20.');
+});
+
+test('a bare subject word switches subject (English or romanised Nepali)', async () => {
+  const { db, send } = setup();
+  await send('JOIN Sita');
+  const current = () => db.prepare('SELECT current_subject FROM students').get().current_subject;
+  const toScience = 'Subject is now Science. Send QUIZ for a question or TOPICS for topics.';
+  const toMaths = 'Subject is now Maths. Send QUIZ for a question or TOPICS for topics.';
+  assert.ok(fitsOneSms(toScience) && fitsOneSms(toMaths));
+
+  for (const [word, reply, subject] of [
+    ['SCI', toScience, 'SCI'], ['GANIT', toMaths, 'MATH'], ['science', toScience, 'SCI'], ['maths', toMaths, 'MATH'],
+    ['Bigyan', toScience, 'SCI'], ['Math', toMaths, 'MATH'], [' VIGYAN ', toScience, 'SCI'], ['ganit', toMaths, 'MATH'],
+  ]) {
+    assert.equal(await send(word), reply, word);
+    assert.equal(current(), subject, word);
+  }
+  // The new words also work after SUBJECT and QUIZ.
+  assert.equal(await send('SUBJECT bigyan'), toScience);
+  await send('QUIZ ganit');
+  assert.equal(current(), 'MATH');
+  // Only the bare word: anything after it is not a switch.
+  assert.equal(await send('SCI please'), REPLIES.unknown);
+  assert.equal(current(), 'MATH');
+  // Unregistered numbers still only get the JOIN prompt.
+  assert.equal(await send('SCI', '9800000099'), REPLIES.notJoined);
+});
+
+test('SCORE shows both subjects in one SMS', async () => {
+  const { db, send, studentId } = setup();
+  const [h1] = [addQ(db, { topic: 'HCF', correct: 'A' }), addQ(db, { topic: 'HCF', correct: 'A' })];
+  const sci = addQ(db, { subject: 'SCI', topic: 'PHY', correct: 'B' });
+  await send('JOIN Sita');
+  assert.equal(await send('SCORE'), 'Maths: 0/0. Science: 0/0. Today 0/20.');
+
+  assert.equal(servedId(await send('QUIZ')), h1);
+  await send('A');
+  await send('QUIZ');
+  await send('B');
+  await send('B');
+  // HCF has 2 first tries at 50%, so it is the weakest maths topic.
+  assert.equal(await send('SCORE'), 'Maths: 1/2 (50%) streak 0. Science: 0/0. Today 2/20. Practise HCF.');
+
+  // Same order whichever subject is current; the tip follows the current subject.
+  await send('SCI');
+  assert.equal(servedId(await send('QUIZ')), sci);
+  await send('B');
+  assert.equal(await send('SCORE'), 'Maths: 1/2 (50%) streak 0. Science: 1/1 (100%) streak 1. Today 3/20.');
+
+  // Four-digit counts still fit one SMS.
+  const sid = studentId();
+  const long = new Date(2026, 0, 1);
+  db.transaction(() => {
+    for (let i = 0; i < 1200; i++) {
+      history(db, sid, h1, true, long); // 4-digit streak too
+      history(db, sid, sci, i % 10 !== 0, long);
+    }
+  })();
+  const reply = await send('SCORE');
+  assert.match(reply, /^Maths: \d{4}\/\d{4} \(\d+%\) streak \d{4}\. Science: \d{4}\/\d{4} \(\d+%\) streak \d+\. Today 3\/20\. Practise PHY\.$/);
+  assert.ok(fitsOneSms(reply), reply);
 });
 
 test('unknown topic gets the fixed reply plus that subject\'s list', async () => {

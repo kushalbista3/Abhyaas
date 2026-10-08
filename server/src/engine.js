@@ -13,7 +13,11 @@ import {
 } from './practice.js';
 import { SUBJECTS, SUBJECT_NAMES, TOPIC_CODES, TOPICS_MESSAGE, formatQuestionSms, maskPhone, normalizePhone } from './sms.js';
 
-const SUBJECT_ALIASES = { MATH: 'MATH', MATHS: 'MATH', SCI: 'SCI', SCIENCE: 'SCI' };
+// English and romanised Nepali (ganit = maths, bigyan/vigyan = science).
+const SUBJECT_ALIASES = {
+  MATH: 'MATH', MATHS: 'MATH', GANIT: 'MATH',
+  SCI: 'SCI', SCIENCE: 'SCI', BIGYAN: 'SCI', VIGYAN: 'SCI',
+};
 const TOPIC_SUBJECT = Object.fromEntries(SUBJECTS.flatMap((s) => TOPIC_CODES[s].map((code) => [code, s])));
 const otherSubject = (s) => SUBJECTS.find((x) => x !== s);
 
@@ -25,7 +29,7 @@ export const REPLIES = {
   joinUsage: 'Send JOIN and your name, e.g. JOIN Sita',
   joinLetters: 'Please send your name in English letters, e.g. JOIN Sita',
   error: 'Sorry, something went wrong. Please try again or send HELP.',
-  noPending: 'No question waiting. Send QUIZ for a new question.',
+  noPending: 'No question waiting. Send QUIZ for a new one.',
   cap: `You have done ${DAILY_QUIZ_CAP} questions today. Great work! Come back tomorrow.`,
   hint: 'Not quite. Check each step of your working and try again. Reply A/B/C/D',
   askUsage: 'Send ASK and your question, e.g. ASK what is a prime factor?',
@@ -170,22 +174,21 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     );
   }
 
+  // Both subjects in one SMS: "Maths: 1/2 (50%) streak 1. Science: 0/0. Today 2/20."
+  // First tries only. The current subject's weakest topic is added if it fits.
   function score(student, t) {
-    const line = (subject, full) => {
+    let weak = null;
+    const parts = SUBJECTS.map((subject) => {
       const tries = firstTries(db, student.id, subject);
       const name = SUBJECT_NAMES[subject];
-      if (!tries.length) return full ? `${name}: no answers yet. Send QUIZ to start.` : '';
+      if (subject === student.current_subject) weak = weakestTopic(tries, subject);
+      if (!tries.length) return `${name}: 0/0.`;
       const right = tries.filter((x) => x.is_correct).length;
       const pct = Math.round((100 * right) / tries.length);
-      if (!full) return `${name}: ${right}/${tries.length} (${pct}%), streak ${streak(tries)}.`;
-      const weak = weakestTopic(tries, subject);
-      return `${name}: ${right}/${tries.length} right first try (${pct}%). Streak ${streak(tries)}.` +
-        (weak ? ` Weakest: ${weak}.` : '');
-    };
-    const main = line(student.current_subject, true);
-    const today = `Today ${quizCountToday(db, student.id, t)}/${DAILY_QUIZ_CAP}.`;
-    const other = line(otherSubject(student.current_subject), false);
-    return firstFitting(`${main} ${today} ${other}`.trim(), `${main} ${today}`, main);
+      return `${name}: ${right}/${tries.length} (${pct}%) streak ${streak(tries)}.`;
+    });
+    const core = `${parts.join(' ')} Today ${quizCountToday(db, student.id, t)}/${DAILY_QUIZ_CAP}.`;
+    return weak ? firstFitting(`${core} Practise ${weak}.`, core) : core;
   }
 
   function ask(student, text, t) {
@@ -224,6 +227,8 @@ export function createSmsEngine(db, { now = () => new Date() } = {}) {
     }
     // TOPICS says "Reply a code", so a bare topic code is QUIZ <code>.
     if (TOPIC_SUBJECT[command] && !arg) return quiz(student, command, t);
+    // A bare subject word ("SCI", "ganit") is SUBJECT <word>.
+    if (SUBJECT_ALIASES[command] && !arg) return subjectCommand(student, command);
 
     const pending = q.pending.get(student.id);
     return pending
