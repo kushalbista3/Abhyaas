@@ -13,15 +13,16 @@ export function seed(db) {
 
   const exists = db.prepare("SELECT 1 FROM questions WHERE source = 'seed' AND source_ref = ?");
   const insertQ = db.prepare(`
-    INSERT INTO questions (topic, stem, option_a, option_b, option_c, option_d,
-      correct_option, solution, misconceptions, source, source_ref)
-    VALUES (@topic, @stem, @option_a, @option_b, @option_c, @option_d,
-      @correct_option, @solution, @misconceptions, 'seed', @source_ref)`);
+    INSERT INTO questions (subject, topic, stem, option_a, option_b, option_c, option_d,
+      correct_option, solution, misconceptions, source, source_ref, status)
+    VALUES (@subject, @topic, @stem, @option_a, @option_b, @option_c, @option_d,
+      @correct_option, @solution, @misconceptions, 'seed', @source_ref, @status)`);
   const insertS = db.prepare('INSERT OR IGNORE INTO students (phone, name, class) VALUES (@phone, @name, @class)');
 
   let questions = 0;
   let students = 0;
   db.transaction(() => {
+    // Existing rows are skipped, so a re-seed never resets a teacher's approval or edit.
     for (const q of SEED_QUESTIONS) {
       if (exists.get(q.source_ref)) continue;
       insertQ.run({ ...q, misconceptions: JSON.stringify(q.misconceptions) });

@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateQuestion, sameValue } from '../src/validate-question.js';
+import { validateQuestion, sameValue, sameText } from '../src/validate-question.js';
 
 const good = () => ({
+  subject: 'MATH',
   topic: 'INT',
   stem: 'Find the compound amount on Rs 10000 at 10% p.a. for 2 years.',
   option_a: 'Rs 12100',
@@ -26,8 +27,55 @@ test('misconceptions may be a JSON string (as stored in the DB)', () => {
   assert.equal(validateQuestion({ ...good(), misconceptions: JSON.stringify(good().misconceptions) }).ok, true);
 });
 
+const goodSci = () => ({
+  subject: 'SCI',
+  topic: 'CHEM',
+  stem: 'Which gas is given off when zinc reacts with dilute hydrochloric acid?',
+  option_a: 'Hydrogen',
+  option_b: 'Oxygen',
+  option_c: 'Chlorine',
+  option_d: 'Carbon dioxide',
+  correct_option: 'A',
+  solution: 'Zn+2HCl->ZnCl2+H2. A metal and a dilute acid give a salt and hydrogen.',
+  misconceptions: { B: 'no oxygen in HCl', C: 'chlorine stays in ZnCl2', D: 'carbonate reaction' },
+});
+
+const sciErrorsOf = (patch) => validateQuestion({ ...goodSci(), ...patch }).errors;
+
 test('rejects unknown topic', () => {
-  assert.match(errorsOf({ topic: 'TRIG' }).join(), /topic must be one of/);
+  assert.match(errorsOf({ topic: 'TRIG' }).join(), /topic for MATH must be one of/);
+});
+
+test('rejects unknown or missing subject', () => {
+  assert.match(errorsOf({ subject: 'ENG' }).join(), /subject must be one of MATH, SCI/);
+  assert.match(errorsOf({ subject: undefined }).join(), /subject must be one of/);
+});
+
+test('topic must belong to the subject', () => {
+  assert.match(errorsOf({ topic: 'PHY' }).join(), /topic for MATH must be one of HCF/);
+  assert.match(sciErrorsOf({ topic: 'PROB' }).join(), /topic for SCI must be one of PHY, CHEM, BIO, EARTH/);
+});
+
+test('a science question passes with a prose solution (no value check)', () => {
+  assert.deepEqual(validateQuestion(goodSci()).errors, []);
+  assert.deepEqual(sciErrorsOf({ solution: 'Metal + dilute acid gives a salt and hydrogen gas.' }), []);
+});
+
+test('science still checks length, GSM-7 and misconceptions', () => {
+  assert.match(sciErrorsOf({ solution: 'x'.repeat(161) }).join(), /solution is 161 chars/);
+  assert.match(sciErrorsOf({ solution: 'H₂ gas' }).join(), /solution has non GSM-7/);
+  assert.match(sciErrorsOf({ stem: 'x'.repeat(120) }).join(), /question SMS is \d+ chars/);
+  assert.match(sciErrorsOf({ misconceptions: { B: 'a', C: 'b' } }).join(), /wrong option D/);
+});
+
+test('science options are compared as text, not as algebra', () => {
+  assert.ok(sameValue('Carbon dioxide', 'Carbon monoxide'), 'why maths comparison is wrong for words');
+  assert.ok(!sameText('Carbon dioxide', 'Carbon monoxide'));
+  assert.ok(!sameText('Ohm', 'Mho'));
+  assert.ok(sameText('Hydrogen', ' hydrogen.'));
+  assert.ok(sameText('Pulmonary  vein', 'pulmonary vein'));
+  assert.deepEqual(sciErrorsOf({ option_d: 'Carbon monoxide', option_c: 'Carbon dioxide' }), []);
+  assert.match(sciErrorsOf({ option_b: 'hydrogen.' }).join(), /options A and B have the same value/);
 });
 
 test('rejects empty and duplicate options', () => {

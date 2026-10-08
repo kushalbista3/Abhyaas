@@ -1,6 +1,6 @@
-# Abhyaas — SEE maths practice on any phone
+# Abhyaas — SEE maths and science practice on any phone
 
-Abhyaas (अभ्यास, "practice") sends Nepal SEE (Grade 10) maths multiple-choice questions by SMS to students on basic keypad phones. Everything runs offline on one laptop. Grading is plain code. A local Gemma model (via Ollama) helps phrase explanations.
+Abhyaas (अभ्यास, "practice") sends Nepal SEE (Grade 10) maths and science multiple-choice questions by SMS to students on basic keypad phones. Everything runs offline on one laptop. Grading is plain code. Science questions reach students only after a teacher approves them (`npm run questions:review`). A local Gemma model (via Ollama) helps phrase explanations.
 
 ## Setup
 

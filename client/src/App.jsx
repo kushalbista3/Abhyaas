@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
-const TOPICS = ['HCF', 'PCT', 'INT', 'ALG', 'GEO', 'SET', 'PROB'];
+const TOPICS = ['HCF', 'PCT', 'INT', 'ALG', 'GEO', 'SET', 'PROB', 'PHY', 'CHEM', 'BIO', 'EARTH'];
 
 export default function App() {
   const [questions, setQuestions] = useState(null);
@@ -19,7 +19,7 @@ export default function App() {
   return (
     <main>
       <h1>Abhyaas</h1>
-      <p className="sub">SEE maths practice on any phone</p>
+      <p className="sub">SEE maths and science practice on any phone</p>
       {error && <p className="error">Could not load questions: {error}</p>}
       {questions && (
         <>
@@ -38,7 +38,7 @@ export default function App() {
             {questions.map((q) => (
               <li key={q.id}>
                 <pre>{q.sms}</pre>
-                <span className="answer">Answer: {q.correct_option}</span>
+                <span className="answer">Answer: {q.correct_option} · {q.status}</span>
               </li>
             ))}
           </ul>

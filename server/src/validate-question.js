@@ -1,5 +1,5 @@
 import { gsmLength, SMS_LIMIT } from './gsm7.js';
-import { formatQuestionSms, LETTERS, TOPIC_CODES } from './sms.js';
+import { formatQuestionSms, LETTERS, SUBJECTS, TOPIC_CODES } from './sms.js';
 import { parse, sample } from './expr.js';
 
 // Worst-case id width so a question that passes still fits once imported.
@@ -59,6 +59,14 @@ export function sameValue(a, b) {
   return normText(a) === normText(b);
 }
 
+// Science options are words. sameValue would read them as algebra (letters as
+// variables, trailing words dropped), so Ohm=Mho and Carbon dioxide=Carbon
+// monoxide. Compare the text instead, ignoring case, spacing and a final period.
+export function sameText(a, b) {
+  const norm = (s) => normText(s).replace(/\.+$/, '');
+  return norm(a) === norm(b);
+}
+
 // Final value a worked solution arrives at: the text after the last '='.
 export function finalValue(solution) {
   const segs = String(solution ?? '').split('=');
@@ -72,12 +80,16 @@ function parseMisconceptions(m) {
   return m && typeof m === 'object' ? m : null;
 }
 
-// Single gate for every question (seed and photo import). Returns all errors.
+// Single gate for every question (seed, photo import, teacher edit). Returns all errors.
 export function validateQuestion(q) {
   const errors = [];
   if (!q || typeof q !== 'object') return { ok: false, errors: ['question is not an object'] };
 
-  if (!TOPIC_CODES.includes(q.topic)) errors.push(`topic must be one of ${TOPIC_CODES.join(', ')}`);
+  const isMath = q.subject === 'MATH';
+  if (!SUBJECTS.includes(q.subject)) errors.push(`subject must be one of ${SUBJECTS.join(', ')}`);
+  else if (!TOPIC_CODES[q.subject].includes(q.topic)) {
+    errors.push(`topic for ${q.subject} must be one of ${TOPIC_CODES[q.subject].join(', ')}`);
+  }
 
   if (!String(q.stem ?? '').trim()) errors.push('stem is empty');
 
@@ -86,10 +98,11 @@ export function validateQuestion(q) {
     if (!v) errors.push(`option ${l} is empty`);
     else if (gsmLength(v) === null) errors.push(`option ${l} has non GSM-7 characters`);
   }
+  const same = isMath ? sameValue : sameText;
   for (let x = 0; x < 4; x++) {
     for (let y = x + 1; y < 4; y++) {
       const a = options[x], b = options[y];
-      if (a.v && b.v && sameValue(a.v, b.v)) errors.push(`options ${a.l} and ${b.l} have the same value`);
+      if (a.v && b.v && same(a.v, b.v)) errors.push(`options ${a.l} and ${b.l} have the same value`);
     }
   }
 
@@ -107,7 +120,9 @@ export function validateQuestion(q) {
   if (!solution) errors.push('solution is empty');
   else if (solLen === null) errors.push('solution has non GSM-7 characters');
   else if (solLen > SMS_LIMIT) errors.push(`solution is ${solLen} chars, max ${SMS_LIMIT}`);
-  if (solution && correctOk) {
+  // Only maths can be checked by code. A science solution is a short
+  // explanation; a teacher checks it before approval (CLAUDE.md rule 8).
+  if (isMath && solution && correctOk) {
     const want = q[`option_${correct.toLowerCase()}`];
     if (want && !sameValue(finalValue(solution), want)) {
       errors.push(`solution ends at "${finalValue(solution)}", not the correct value "${want}"`);

@@ -1,14 +1,15 @@
 {
   "name": "abhyaas",
   "private": true,
-  "description": "SEE maths MCQ practice over SMS for keypad phones",
+  "description": "SEE maths and science MCQ practice over SMS for keypad phones",
   "license": "MIT",
   "workspaces": ["server", "client"],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
     "test": "npm test -w server",
     "seed": "npm run seed -w server",
-    "demo:reset": "npm run demo:reset -w server"
+    "demo:reset": "npm run demo:reset -w server",
+    "questions:review": "npm run questions:review -w server --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

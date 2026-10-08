@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TOPICS_MESSAGE, TOPIC_CODES, formatQuestionSms, maskPhone } from '../src/sms.js';
+import { SUBJECTS, TOPICS_MESSAGE, TOPIC_CODES, formatQuestionSms, maskPhone } from '../src/sms.js';
 import { fitsOneSms } from '../src/gsm7.js';
 
-test('TOPICS message fits one GSM-7 SMS and lists every code', () => {
-  assert.ok(fitsOneSms(TOPICS_MESSAGE), TOPICS_MESSAGE);
-  for (const code of TOPIC_CODES) assert.match(TOPICS_MESSAGE, new RegExp(`\\b${code}=`));
+test("each subject's TOPICS message fits one GSM-7 SMS and lists its codes", () => {
+  assert.deepEqual(SUBJECTS, ['MATH', 'SCI']);
+  for (const s of SUBJECTS) {
+    assert.ok(fitsOneSms(TOPICS_MESSAGE[s]), TOPICS_MESSAGE[s]);
+    for (const code of TOPIC_CODES[s]) assert.match(TOPICS_MESSAGE[s], new RegExp(`\\b${code}=`));
+  }
+});
+
+test('topic codes are unique across subjects', () => {
+  const all = SUBJECTS.flatMap((s) => TOPIC_CODES[s]);
+  assert.equal(new Set(all).size, all.length);
 });
 
 test('question SMS layout', () => {

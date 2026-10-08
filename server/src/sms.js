@@ -1,19 +1,37 @@
 export const TOPICS = {
-  HCF: 'HCF/LCM',
-  PCT: 'Profit/VAT',
-  INT: 'Interest',
-  ALG: 'Algebra',
-  GEO: 'Area/Volume',
-  SET: 'Sets',
-  PROB: 'Probability',
+  MATH: {
+    HCF: 'HCF/LCM',
+    PCT: 'Profit/VAT',
+    INT: 'Interest',
+    ALG: 'Algebra',
+    GEO: 'Area/Volume',
+    SET: 'Sets',
+    PROB: 'Probability',
+  },
+  SCI: {
+    PHY: 'Physics',
+    CHEM: 'Chemistry',
+    BIO: 'Biology',
+    EARTH: 'Earth/Space',
+  },
 };
 
-export const TOPIC_CODES = Object.keys(TOPICS);
+export const SUBJECTS = Object.keys(TOPICS);
 
-export const TOPICS_MESSAGE =
-  'Topics: ' +
-  Object.entries(TOPICS).map(([code, name]) => `${code}=${name}`).join(' ') +
-  '. Reply a code, e.g. PCT';
+const SUBJECT_NAMES = { MATH: 'Maths', SCI: 'Science' };
+const EXAMPLE_TOPIC = { MATH: 'PCT', SCI: 'BIO' };
+
+// Per subject: TOPIC_CODES.SCI = ['PHY', ...], TOPICS_MESSAGE.SCI = 'Science topics: ...'
+export const TOPIC_CODES = Object.fromEntries(SUBJECTS.map((s) => [s, Object.keys(TOPICS[s])]));
+
+export const TOPICS_MESSAGE = Object.fromEntries(
+  SUBJECTS.map((s) => [
+    s,
+    `${SUBJECT_NAMES[s]} topics: ` +
+      Object.entries(TOPICS[s]).map(([code, name]) => `${code}=${name}`).join(' ') +
+      `. Reply a code, e.g. ${EXAMPLE_TOPIC[s]}`,
+  ]),
+);
 
 export const LETTERS = ['A', 'B', 'C', 'D'];
 

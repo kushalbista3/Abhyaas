@@ -2,7 +2,9 @@
 // Every wrong option is a real student mistake, named in its misconception note.
 // Plain GSM-7 text only: x^2 for squares, * for multiply, no Devanagari/emoji.
 
-export const SEED_QUESTIONS = [
+// Maths: correctness is checked by validateQuestion, and these have been
+// reviewed by a teacher, so they seed as approved.
+const MATH_QUESTIONS = [
   {
     source_ref: 'seed:HCF-1',
     topic: 'HCF',
@@ -227,6 +229,145 @@ export const SEED_QUESTIONS = [
       D: 'Found P(red) for the first draw only.',
     },
   },
+];
+
+// Science: facts can't be checked by code (CLAUDE.md rule 8), so these seed
+// as needs-review until a teacher approves them with `npm run questions:review`.
+// Concept questions only (no diagrams). The solution is a short explanation.
+const SCIENCE_QUESTIONS = [
+  {
+    source_ref: 'seed:PHY-1',
+    topic: 'PHY',
+    stem: 'A girl has a mass of 60 kg on Earth. What is her mass on the Moon?',
+    option_a: '10 kg',
+    option_b: '600 N',
+    option_c: '0 kg',
+    option_d: '60 kg',
+    correct_option: 'D',
+    solution: 'Mass is the amount of matter in a body, so it stays 60 kg anywhere. Only weight (W=mg) changes; on the Moon it is about 1/6 of that on Earth.',
+    misconceptions: {
+      A: 'Mixed up mass and weight: weight on the Moon is about 1/6, but mass does not change.',
+      B: 'Gave her weight on Earth (W=mg=60*10 N). Weight is a force in newtons, not mass.',
+      C: 'Thought there is no gravity on the Moon, so nothing has mass there.',
+    },
+  },
+  {
+    source_ref: 'seed:PHY-2',
+    topic: 'PHY',
+    stem: 'Light passes from air into glass. What happens to it?',
+    option_a: 'Speeds up',
+    option_b: 'Slows down',
+    option_c: 'Speed stays same',
+    option_d: 'Colour changes',
+    correct_option: 'B',
+    solution: 'Glass is optically denser than air, so light slows down (to about 2x10^8 m/s) and bends towards the normal. Its colour (frequency) does not change.',
+    misconceptions: {
+      A: 'Thought light, like sound, travels faster in a denser medium.',
+      C: 'Thought light always moves at 3x10^8 m/s; that is its speed in vacuum only.',
+      D: 'Thought refraction changes colour. Frequency stays the same; speed and wavelength change.',
+    },
+  },
+  {
+    source_ref: 'seed:CHEM-1',
+    topic: 'CHEM',
+    stem: 'Which gas is given off when zinc reacts with dilute hydrochloric acid?',
+    option_a: 'Hydrogen',
+    option_b: 'Oxygen',
+    option_c: 'Chlorine',
+    option_d: 'Carbon dioxide',
+    correct_option: 'A',
+    solution: 'Zn+2HCl->ZnCl2+H2. A metal and a dilute acid give a salt and hydrogen gas, which burns with a pop sound.',
+    misconceptions: {
+      B: 'Thought the bubbles must be oxygen, but HCl has no oxygen to give.',
+      C: 'Thought the chlorine of HCl is released; it stays in the salt ZnCl2.',
+      D: 'Mixed up with acid + carbonate, which gives CO2. Zinc metal has no carbon.',
+    },
+  },
+  {
+    source_ref: 'seed:CHEM-2',
+    topic: 'CHEM',
+    stem: 'An element has atomic number 11. In which group of the periodic table is it?',
+    option_a: 'Group 11',
+    option_b: 'Group 3',
+    option_c: 'Group 1',
+    option_d: 'Group 8',
+    correct_option: 'C',
+    solution: 'Electron configuration 2,8,1: one electron in the outer shell, so group 1 (IA). Its 3 shells give period 3. It is sodium.',
+    misconceptions: {
+      A: 'Took the atomic number as the group number.',
+      B: 'Took the number of shells (3) as the group; shells give the period.',
+      D: 'Took the 8 electrons of the second shell, not the outermost shell.',
+    },
+  },
+  {
+    source_ref: 'seed:BIO-1',
+    topic: 'BIO',
+    stem: 'Pure tall (TT) and dwarf (tt) pea plants are crossed. What are the F1 plants?',
+    option_a: 'All tall',
+    option_b: 'All dwarf',
+    option_c: '3 tall:1 dwarf',
+    option_d: 'All medium',
+    correct_option: 'A',
+    solution: 'Every F1 plant is Tt. T (tall) is dominant over t (dwarf), so all F1 plants are tall. The 3:1 ratio appears only in F2.',
+    misconceptions: {
+      B: 'Mixed up dominant and recessive: t is hidden when T is present.',
+      C: 'Gave the F2 ratio (from selfing Tt plants), not F1.',
+      D: 'Thought traits blend. Tall is dominant, so Tt plants are fully tall.',
+    },
+  },
+  {
+    source_ref: 'seed:BIO-2',
+    topic: 'BIO',
+    stem: 'Which blood vessel carries oxygen-rich blood from the lungs to the heart?',
+    option_a: 'Pulmonary artery',
+    option_b: 'Aorta',
+    option_c: 'Vena cava',
+    option_d: 'Pulmonary vein',
+    correct_option: 'D',
+    solution: 'The pulmonary vein brings oxygen-rich blood from the lungs to the left atrium. It is the only vein that carries oxygen-rich blood.',
+    misconceptions: {
+      A: 'Thought arteries always carry oxygen-rich blood. The pulmonary artery takes deoxygenated blood to the lungs.',
+      B: 'The aorta carries oxygen-rich blood, but from the heart to the body, not from the lungs.',
+      C: 'Thought the vein entering the heart is the vena cava; it brings deoxygenated blood from the body.',
+    },
+  },
+  {
+    source_ref: 'seed:EARTH-1',
+    topic: 'EARTH',
+    stem: 'Which gas from burning fuels is the main cause of global warming?',
+    option_a: 'Sulphur dioxide',
+    option_b: 'Ozone',
+    option_c: 'Carbon dioxide',
+    option_d: 'Nitrogen',
+    correct_option: 'C',
+    solution: 'Burning coal, petrol and wood releases CO2. CO2 traps heat given off by the Earth (greenhouse effect), so the average temperature rises.',
+    misconceptions: {
+      A: 'Mixed up global warming with acid rain; SO2 causes acid rain.',
+      B: 'Mixed up global warming with ozone layer depletion, which is caused by CFCs.',
+      D: 'Thought the most plentiful gas in air causes warming; nitrogen does not trap heat.',
+    },
+  },
+  {
+    source_ref: 'seed:EARTH-2',
+    topic: 'EARTH',
+    stem: 'What does a light year measure?',
+    option_a: 'Time',
+    option_b: 'Distance',
+    option_c: 'Speed',
+    option_d: 'Brightness',
+    correct_option: 'B',
+    solution: 'A light year is the distance light travels in one year, about 9.46x10^12 km. It is used to measure distances to stars.',
+    misconceptions: {
+      A: 'The word "year" made them think it measures time.',
+      C: 'Thought it is the speed of light.',
+      D: 'The word "light" made them think it measures how bright a star is.',
+    },
+  },
+];
+
+export const SEED_QUESTIONS = [
+  ...MATH_QUESTIONS.map((q) => ({ subject: 'MATH', status: 'approved', ...q })),
+  ...SCIENCE_QUESTIONS.map((q) => ({ subject: 'SCI', status: 'needs-review', ...q })),
 ];
 
 // Fake numbers for demos only.
