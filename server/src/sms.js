@@ -18,7 +18,7 @@ export const TOPICS = {
 
 export const SUBJECTS = Object.keys(TOPICS);
 
-const SUBJECT_NAMES = { MATH: 'Maths', SCI: 'Science' };
+export const SUBJECT_NAMES = { MATH: 'Maths', SCI: 'Science' };
 const EXAMPLE_TOPIC = { MATH: 'PCT', SCI: 'BIO' };
 
 // Per subject: TOPIC_CODES.SCI = ['PHY', ...], TOPICS_MESSAGE.SCI = 'Science topics: ...'
@@ -49,4 +49,10 @@ export function maskPhone(phone) {
   const s = String(phone ?? '');
   if (s.length <= 4) return '*'.repeat(s.length);
   return s.slice(0, 2) + '*'.repeat(s.length - 4) + s.slice(-2);
+}
+
+// Gateway numbers may arrive as "+977 980-0000001"; store the local 10 digits.
+export function normalizePhone(phone) {
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  return digits.length === 13 && digits.startsWith('977') ? digits.slice(3) : digits;
 }

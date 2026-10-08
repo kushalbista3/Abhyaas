@@ -19,7 +19,9 @@ export default function App() {
   return (
     <main>
       <h1>Abhyaas</h1>
-      <p className="sub">SEE maths and science practice on any phone</p>
+      <p className="sub">
+        SEE maths and science practice on any phone · <a href="/phone">Phone simulator</a>
+      </p>
       {error && <p className="error">Could not load questions: {error}</p>}
       {questions && (
         <>

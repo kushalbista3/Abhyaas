@@ -11,6 +11,8 @@ npm run seed
 npm run dev
 ```
 
+Open http://localhost:5173/phone for the SMS simulator (a keypad-phone thread for a projector). The SMS gateway phone posts each incoming SMS to `POST /api/sms/incoming` with `{phone, body}` and sends back the `reply`.
+
 `npm test` runs the test suite. `npm run demo:reset` wipes the local demo database.
 
 ## License

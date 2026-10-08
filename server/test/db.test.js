@@ -38,6 +38,7 @@ test('CHECK constraints reject bad enum values', () => {
   assert.throws(() => insertQ('MATH', 'PHY'), 'science topic under maths');
   assert.throws(() => insertQ('SCI', 'HCF'), 'maths topic under science');
   assert.throws(() => insertQ('SCI', 'PHY', 'pending'));
+  assert.throws(() => db.prepare("INSERT INTO sessions (student_id, origin) VALUES (1, 'cron')").run());
   insertQ('SCI', 'PHY');
   insertQ('MATH', 'HCF', 'approved');
 });
@@ -76,10 +77,16 @@ test('openDb migrates a DB made before science existed', () => {
         option_d TEXT NOT NULL, correct_option TEXT NOT NULL, solution TEXT NOT NULL,
         misconceptions TEXT NOT NULL, source TEXT NOT NULL, source_ref TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE TABLE sessions (id INTEGER PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, topic TEXT,
+        current_question_id INTEGER REFERENCES questions(id),
+        state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','ended')),
+        started_at TEXT NOT NULL DEFAULT (datetime('now')), ended_at TEXT);
       CREATE TABLE attempts (id INTEGER PRIMARY KEY,
         student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-        question_id INTEGER NOT NULL REFERENCES questions(id), chosen_option TEXT NOT NULL,
-        is_correct INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+        question_id INTEGER NOT NULL REFERENCES questions(id), session_id INTEGER REFERENCES sessions(id),
+        chosen_option TEXT NOT NULL, is_correct INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')));
       CREATE TABLE doubts (id INTEGER PRIMARY KEY, student_id INTEGER NOT NULL REFERENCES students(id),
         text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', reply TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')));
@@ -88,7 +95,8 @@ test('openDb migrates a DB made before science existed', () => {
         misconceptions, source, source_ref) VALUES
         ('HCF','s','a','b','c','d','A','s','{}','seed','seed:HCF-1'),
         ('ALG','t','a','b','c','d','B','s','{}','photo-import','book p1');
-      INSERT INTO attempts (student_id, question_id, chosen_option, is_correct) VALUES (1, 1, 'A', 1);
+      INSERT INTO sessions (student_id, current_question_id) VALUES (1, 1);
+      INSERT INTO attempts (student_id, question_id, session_id, chosen_option, is_correct) VALUES (1, 1, 1, 'A', 1);
       INSERT INTO doubts (student_id, text) VALUES (1, 'why?');
     `);
     old.close();
@@ -101,6 +109,8 @@ test('openDb migrates a DB made before science existed', () => {
     assert.equal(db.prepare('SELECT current_subject FROM students').get().current_subject, 'MATH');
     assert.equal(db.prepare('SELECT subject FROM doubts').get().subject, 'MATH');
     assert.equal(db.prepare('SELECT question_id FROM attempts').get().question_id, 1);
+    assert.deepEqual(db.prepare('SELECT state, origin FROM sessions').get(), { state: 'active', origin: 'quiz' });
+    assert.throws(() => db.prepare("UPDATE sessions SET origin = 'cron'").run());
     assert.deepEqual(db.pragma('foreign_key_check'), []);
     assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
     assert.equal(seed(db).questions, 21, 'HCF-1 already there; the rest are new');

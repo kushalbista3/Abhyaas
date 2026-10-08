@@ -34,20 +34,23 @@ SEE (Nepal Grade 10) maths and science MCQ practice over SMS for students on key
 ```
 server/src/config.js             loads .env; DB_PATH, PORT, OLLAMA_MODEL, GEMINI_MODEL
 server/src/db.js                 openDb() + full schema (CREATE IF NOT EXISTS, CHECK constraints) + migrate()
-server/src/gsm7.js               gsmLength(), fitsOneSms(), SMS_LIMIT
-server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone()
+server/src/gsm7.js               gsmLength(), fitsOneSms(), smsSafe(), firstFitting(), SMS_LIMIT
+server/src/sms.js                SUBJECTS, TOPICS / TOPIC_CODES / TOPICS_MESSAGE per subject, formatQuestionSms(), maskPhone(), normalizePhone()
+server/src/engine.js             createSmsEngine(db) -> handleIncomingSms(phone, body), pushQuestion(); commands, grading, logging
+server/src/practice.js           adaptive QUIZ order, weakest topic, due reviews, streaks, daily cap
+server/src/app.js                createApp(db): Express routes (POST /api/sms/incoming, /api/sim/* for the simulator)
 server/src/expr.js               safe expression evaluator (no eval) for value comparison
 server/src/validate-question.js  validateQuestion(), the ONLY gate for questions
 server/src/seed-data.js          14 maths + 8 science original MCQs (2 per topic) + 3 fake demo students
 server/src/review.js             teacher review CLI (list, approve, edit)
 server/src/seed.js, demo-reset.js
 server/data/                     abhyaas.db, *.local.json (all gitignored)
-client/src/                      React app
+client/src/                      React app: App.jsx dashboard, Phone.jsx SMS simulator at /phone
 ```
 
 ## Data model
 
-`students` (+ current_subject MATH|SCI, default MATH), `questions` (subject `MATH`|`SCI`, status `needs-review`|`approved`, topic, stem, option_a-d, correct_option, solution, misconceptions JSON keyed by wrong letter, source `seed`|`photo-import`, source_ref), `explanations` (status `draft`|`approved`, model `gemma`|`teacher`), `sessions`, `attempts`, `messages`, `outbox` (`queued`|`sent`|`failed`), `doubts` (`open`|`answered`, subject). Enums, and which topics belong to which subject, are enforced with CHECK constraints. `openDb()` migrates older DBs in place.
+`students` (+ current_subject MATH|SCI, default MATH), `questions` (subject `MATH`|`SCI`, status `needs-review`|`approved`, topic, stem, option_a-d, correct_option, solution, misconceptions JSON keyed by wrong letter, source `seed`|`photo-import`, source_ref), `explanations` (status `draft`|`approved`, model `gemma`|`teacher`), `sessions` (one per served question; origin `quiz`|`push`), `attempts` (first attempt per session = the "first try" used for stats), `messages`, `outbox` (`queued`|`sent`|`failed`), `doubts` (`open`|`answered`, subject). Enums, and which topics belong to which subject, are enforced with CHECK constraints. `openDb()` migrates older DBs in place.
 
 ## Questions
 
@@ -64,6 +67,14 @@ client/src/                      React app
 - Each subject's TOPICS message must fit one SMS.
 - New questions start as `needs-review`. Only approved questions go to students.
 - New seed questions must be original. Each wrong option must be a real student mistake, described in its misconception note. Keep the correct letters spread across A-D.
+
+## SMS engine
+
+- Commands: JOIN <name>, HELP, SUBJECT [MATH|SCI], TOPICS, QUIZ [MATH|SCI|<code>], a bare topic code, A-D, SCORE, ASK <text>. Unknown numbers only get the JOIN prompt.
+- Wrong first try: the approved explanation for that option, else a generic hint. Never the solution. Wrong second try: answer + solution, session ends.
+- QUIZ order per subject: due review in weakest topic, any due review (first try wrong >= 2 days ago), new in weakest topic, next new, then least recently practised. Weakest = lowest first-try accuracy with >= 2 tries, never 100%.
+- Daily cap: 20 QUIZ-served questions per local day (`origin = 'quiz'`); pushes don't count.
+- Every reply goes through `smsSafe()` and is logged to `messages` and `outbox`. Tests pass a fake clock: `createSmsEngine(db, { now })`.
 
 ## Conventions
 

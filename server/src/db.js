@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   topic                TEXT,
   current_question_id  INTEGER REFERENCES questions(id),
   state                TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','ended')),
+  origin               TEXT NOT NULL DEFAULT 'quiz' CHECK (origin IN ('quiz','push')),
   started_at           TEXT NOT NULL DEFAULT (datetime('now')),
   ended_at             TEXT
 );
@@ -94,6 +95,9 @@ CREATE TABLE IF NOT EXISTS doubts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_attempts_student ON attempts(student_id);
+CREATE INDEX IF NOT EXISTS idx_attempts_session ON attempts(session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_student ON sessions(student_id, state);
+CREATE INDEX IF NOT EXISTS idx_messages_phone ON messages(phone);
 CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox(status);
 CREATE INDEX IF NOT EXISTS idx_doubts_status ON doubts(status);
 CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject, status);
@@ -135,5 +139,10 @@ function migrate(db) {
   const dCols = columns(db, 'doubts');
   if (dCols.length && !dCols.includes('subject')) {
     db.exec("ALTER TABLE doubts ADD COLUMN subject TEXT NOT NULL DEFAULT 'MATH' CHECK (subject IN ('MATH','SCI'))");
+  }
+  // origin: a QUIZ request ('quiz') or a scheduled push; only QUIZ counts toward the daily cap.
+  const sesCols = columns(db, 'sessions');
+  if (sesCols.length && !sesCols.includes('origin')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN origin TEXT NOT NULL DEFAULT 'quiz' CHECK (origin IN ('quiz','push'))");
   }
 }
